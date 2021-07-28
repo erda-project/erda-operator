@@ -213,7 +213,7 @@ func BuildDeployment(
 		},
 	}
 
-	if os.Getenv(EnableAffinity) != "disable" {
+	if os.Getenv(EnableAffinity) != "false" {
 		deploy.Spec.Template.Spec.Affinity = ComposeAffinity(affinity, dicesvcname)
 	}
 

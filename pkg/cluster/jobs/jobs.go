@@ -16,6 +16,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"github.com/erda-project/dice-operator/pkg/cluster/deployment"
 	"os"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/erda-project/dice-operator/pkg/cluster/check"
-	"github.com/erda-project/dice-operator/pkg/cluster/deployment"
 	"github.com/erda-project/dice-operator/pkg/cluster/diff"
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/dice-operator/pkg/utils"
@@ -36,6 +36,7 @@ import (
 
 const (
 	EnableAffinity = "ENABLE_AFFINITY"
+	InjectClusterInfo = "INJECT_CLUSTER_INFO"
 )
 
 func GenName(dicejobname string, clus *spec.DiceCluster) string {
@@ -90,8 +91,7 @@ func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster) ([]batchv1.Job, er
 						RestartPolicy:      "Never",
 						Containers: []corev1.Container{{
 							Name:            name,
-							Env:             envs(name, j, clus),
-							EnvFrom:         deployment.EnvsFrom(clus),
+							Env:             composeEnvFromDiceJob(j),
 							Image:           j.Image,
 							ImagePullPolicy: corev1.PullAlways,
 							Command: map[bool][]string{
@@ -117,8 +117,14 @@ func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster) ([]batchv1.Job, er
 				},
 			},
 		}
-		if os.Getenv(EnableAffinity) != "disable" {
+		if os.Getenv(EnableAffinity) != "false" {
 			k8sjob.Spec.Template.Spec.Affinity = ComposeAffinity()
+		}
+		if os.Getenv(InjectClusterInfo) != "false" {
+			for index, container := range k8sjob.Spec.Template.Spec.Containers {
+				container.EnvFrom = deployment.EnvsFrom(clus)
+				k8sjob.Spec.Template.Spec.Containers[index] = container
+			}
 		}
 		jobs = append(jobs, k8sjob)
 	}
@@ -152,14 +158,13 @@ func volumes(dicejob *diceyml.Job) (volumes []corev1.Volume, volumeMounts []core
 	return
 }
 
-func envs(dicejobname string, dicejob *diceyml.Job, clus *spec.DiceCluster) []corev1.EnvVar {
-	r := []corev1.EnvVar{}
 
-	// for k, v := range dicejob.Envs {
-	// 	r = append(r, corev1.EnvVar{Name: k, Value: v})
-	// }
-	// r = append(r, corev1.EnvVar{Name: "DICE_VERSION", Value: version.Version})
-	return r
+func composeEnvFromDiceJob(job *diceyml.Job)[]corev1.EnvVar {
+	envs := []corev1.EnvVar{}
+	for k, v := range job.Envs {
+		envs = append(envs, corev1.EnvVar{Name: k, Value: v})
+	}
+	return envs
 }
 
 func ComposeAffinity() *corev1.Affinity {

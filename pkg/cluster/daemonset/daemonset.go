@@ -190,7 +190,7 @@ func BuildDaemonSet(
 		},
 	}
 
-	if os.Getenv(EnableAffinity) != "disable" {
+	if os.Getenv(EnableAffinity) != "false" {
 		ds.Spec.Template.Spec.Affinity = ComposeAffinity(dicesvcname)
 	}
 
