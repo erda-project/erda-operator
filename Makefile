@@ -19,8 +19,8 @@ TARGETS_DIR := dice-operator
 IMAGE_PREFIX ?= $(strip )
 IMAGE_SUFFIX ?= $(strip )
 
-IMAGE_TAG ?= $(shell git describe --abbrev=0 --tags --always)-$(shell date -u +%Y%m%d)
-DOCKER_LABELS ?= git-describe="$(shell git describe --abbrev=0 --tags --always)-$(shell date -u +%Y%m%d)"
+IMAGE_TAG ?= $(shell cat VERSION)
+DOCKER_LABELS ?= git-describe="$(shell cat VERSION)"
 
 GO_OPTIONS ?= -mod=vendor -count=1
 SHELLOPTS := errexit
