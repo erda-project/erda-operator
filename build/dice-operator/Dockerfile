@@ -1,4 +1,4 @@
-FROM registry.cn-hangzhou.aliyuncs.com/terminus/golang:1.16.6-stretch AS builder
+FROM registry.erda.cloud/erda/golang:1.16.6-stretch AS builder
 
 ARG GO_PROJECT_ROOT
 
@@ -17,7 +17,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/dice-operator cmd/dice-operator/main.go
 
-FROM registry.cn-hangzhou.aliyuncs.com/terminus/alpine:3.14
+FROM registry.erda.cloud/erda/alpine:3.14
 
 ARG GO_PROJECT_ROOT
 
