@@ -46,8 +46,9 @@ func GenName(dicejobname string, clus *spec.DiceCluster) string {
 func CreateAndWait(
 	client kubernetes.Interface,
 	dicejobs diceyml.Jobs,
-	clus *spec.DiceCluster) error {
-	jobs, err := buildJobs(dicejobs, clus)
+	clus *spec.DiceCluster,
+	ownerRefs []metav1.OwnerReference) error {
+	jobs, err := buildJobs(dicejobs, clus, ownerRefs)
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,7 @@ func CreateAndWait(
 	return nil
 }
 
-func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster) ([]batchv1.Job, error) {
+func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster, ownerRefs []metav1.OwnerReference) ([]batchv1.Job, error) {
 	jobs := []batchv1.Job{}
 	for name, j := range dicejobs {
 		vols, volmounts, err := volumes(j)
@@ -79,6 +80,7 @@ func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster) ([]batchv1.Job, er
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      GenName(name, clus),
 				Namespace: clus.Namespace,
+				OwnerReferences: ownerRefs,
 			},
 			Spec: batchv1.JobSpec{
 				Template: corev1.PodTemplateSpec{

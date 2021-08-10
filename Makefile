@@ -15,7 +15,7 @@ GO_PROJECT_ROOT := github.com/erda-project/erda
 
 REGISTRY := registry.cn-hangzhou.aliyuncs.com/dice
 BUILD_DIR := ./build
-TARGETS_DIR := dice-operator
+TARGETS_DIR := erda-operator
 IMAGE_PREFIX ?= $(strip )
 IMAGE_SUFFIX ?= $(strip )
 
