@@ -86,9 +86,9 @@ func (c *Controller) monitor(resourceversion string, AddFunc, UpdateFunc, Delete
 	monitorFailCount := 0
 	for { // apiserver will close stream periodically? Yes
 		body, err := c.client.Get().
-			Prefix("apis", crd.CRDGroupVersion).
+			Prefix("apis", crd.GetCRDGroupVersion()).
 			Namespace(c.cfg.Namespace).
-			Resource(crd.CRDPlural).
+			Resource(crd.GetCRDPlural()).
 			VersionedParams(&metav1.ListOptions{ResourceVersion: resourceversion, Watch: true},
 				metav1.ParameterCodec).Stream(context.Background())
 		if err != nil {
@@ -151,9 +151,9 @@ func (c *Controller) monitor(resourceversion string, AddFunc, UpdateFunc, Delete
 func (c *Controller) listDiceClusters() (*spec.DiceClusterList, error) {
 	result := &spec.DiceClusterList{}
 	req := c.client.Get().
-		Prefix("apis", crd.CRDGroupVersion).
+		Prefix("apis", crd.GetCRDGroupVersion()).
 		Namespace(c.cfg.Namespace).
-		Resource(crd.CRDPlural).
+		Resource(crd.GetCRDPlural()).
 		VersionedParams(&metav1.ListOptions{}, metav1.ParameterCodec)
 	r, err := req.DoRaw(context.Background())
 	if err != nil {
