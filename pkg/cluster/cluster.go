@@ -76,7 +76,7 @@ func (c *Cluster) create() error {
 		statusop.UpdateConditionAndPhase(c.client, c.target, c.target.Namespace, c.target.Name,
 			spec.Condition{Reason: "execute init jobs"}, spec.ClusterPhaseInitJobs)
 
-		if err := jobs.CreateAndWait(c.k8sclient, c.target.Spec.InitJobs.Jobs, c.target); err != nil {
+		if err := jobs.CreateAndWait(c.k8sclient, c.target.Spec.InitJobs.Jobs, c.target, c.ownerRefs); err != nil {
 			statusop.UpdateConditionAndPhase(c.client, c.target, c.target.Namespace, c.target.Name,
 				spec.Condition{Reason: fmt.Sprintf("create init jobs failed: %v", err)}, spec.ClusterPhaseFailed)
 			return nil
