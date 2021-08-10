@@ -35,9 +35,12 @@ import (
 )
 
 const (
-	EnableAffinity           = "ENABLE_AFFINITY"
-	EnableSpecifiedNamespace = "ENABLE_SPECIFIED_NAMESPACE"
-	EnableEtcdSecret         = "ENABLE_ETCD_SECRET"
+	EnableAffinity                  = "ENABLE_AFFINITY"
+	EnableSpecifiedNamespace        = "ENABLE_SPECIFIED_NAMESPACE"
+	EnableEtcdSecret                = "ENABLE_ETCD_SECRET"
+	EtcdSecretName                  = "ETCD_SECRET_NAME"
+	DefaultSecretName               = "erda-etcd-client-secret"
+	CRDKindSpecified         string = "CRD_KIND_SPECIFIED"
 )
 
 func GenName(dicesvcname string, clus *spec.DiceCluster) string {
@@ -230,7 +233,10 @@ func GenSAName(diceSvcName string) string {
 		return diceSvcName
 	}
 
-	return "dice-operator"
+	if os.Getenv(CRDKindSpecified) != "" {
+		return strings.ToLower(os.Getenv(CRDKindSpecified)) + "-operator"
+	}
+	return "erda-operator"
 }
 
 func EnvsFrom(clus *spec.DiceCluster) []corev1.EnvFromSource {
@@ -616,16 +622,21 @@ func Volumes(dicesvc *diceyml.Service) (volumes []corev1.Volume, volumeMounts []
 		})
 	}
 	if os.Getenv(EnableEtcdSecret) != "disable" {
+		name := DefaultSecretName
+
+		if os.Getenv(EtcdSecretName) != "" {
+			name = os.Getenv(EtcdSecretName)
+		}
 		volumes = append(volumes, corev1.Volume{
-			Name: "etcd-client-secret",
+			Name: name,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: "etcd-client-secret",
+					SecretName: name,
 				},
 			},
 		})
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "etcd-client-secret",
+			Name:      name,
 			ReadOnly:  true,
 			MountPath: "/certs/",
 		})
