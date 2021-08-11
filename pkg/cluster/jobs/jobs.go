@@ -16,7 +16,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"github.com/erda-project/dice-operator/pkg/cluster/deployment"
 	"os"
 	"time"
 
@@ -27,7 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/erda-project/dice-operator/pkg/cluster/check"
-	"github.com/erda-project/dice-operator/pkg/cluster/diff"
+	"github.com/erda-project/dice-operator/pkg/cluster/deployment"
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
@@ -35,7 +34,7 @@ import (
 )
 
 const (
-	EnableAffinity = "ENABLE_AFFINITY"
+	EnableAffinity    = "ENABLE_AFFINITY"
 	InjectClusterInfo = "INJECT_CLUSTER_INFO"
 )
 
@@ -78,8 +77,8 @@ func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster, ownerRefs []metav1
 		}
 		k8sjob := batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      GenName(name, clus),
-				Namespace: clus.Namespace,
+				Name:            GenName(name, clus),
+				Namespace:       clus.Namespace,
 				OwnerReferences: ownerRefs,
 			},
 			Spec: batchv1.JobSpec{
@@ -89,7 +88,7 @@ func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster, ownerRefs []metav1
 						Namespace: clus.Namespace,
 					},
 					Spec: corev1.PodSpec{
-						ServiceAccountName: GenSAName(""),
+						ServiceAccountName: utils.GenSAName(""),
 						RestartPolicy:      "Never",
 						Containers: []corev1.Container{{
 							Name:            name,
@@ -160,8 +159,7 @@ func volumes(dicejob *diceyml.Job) (volumes []corev1.Volume, volumeMounts []core
 	return
 }
 
-
-func composeEnvFromDiceJob(job *diceyml.Job)[]corev1.EnvVar {
+func composeEnvFromDiceJob(job *diceyml.Job) []corev1.EnvVar {
 	envs := []corev1.EnvVar{}
 	for k, v := range job.Envs {
 		envs = append(envs, corev1.EnvVar{Name: k, Value: v})
@@ -230,12 +228,4 @@ func ComposeAffinity() *corev1.Affinity {
 			},
 		},
 	}
-}
-
-func GenSAName(diceSvcName string) string {
-	if diceSvcName == diff.ClusterAgent {
-		return diceSvcName
-	}
-
-	return "dice-operator"
 }
