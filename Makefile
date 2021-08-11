@@ -13,7 +13,12 @@
 
 GO_PROJECT_ROOT := github.com/erda-project/erda
 
-REGISTRY := registry.cn-hangzhou.aliyuncs.com/dice
+ifeq ($(REGISTRY_HOST),)
+    REGISTRY := registry.erda.cloud/erda
+else
+    REGISTRY := $(REGISTRY_HOST)
+endif
+
 BUILD_DIR := ./build
 TARGETS_DIR := erda-operator
 IMAGE_PREFIX ?= $(strip )

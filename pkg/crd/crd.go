@@ -15,6 +15,9 @@ package crd
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strings"
 
 	apiextensionv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextension "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -24,13 +27,12 @@ import (
 )
 
 const (
-	CRDKind         string = "Dice"
-	CRDSingular     string = "dice"
-	CRDPlural       string = "dices"
-	CRDGroup        string = "dice.terminus.io"
-	CRDVersion      string = "v1beta1"
-	CRDFullname     string = CRDPlural + "." + CRDGroup
-	CRDGroupVersion string = CRDGroup + "/" + CRDVersion
+	CRDKind          string = "Erda"
+	CRDSingular      string = "erda"
+	CRDPlural        string = "erdas"
+	CRDGroup         string = "erda.terminus.io"
+	CRDVersion       string = "v1beta1"
+	CRDKindSpecified string = "CRD_KIND_SPECIFIED"
 )
 
 // CreateCRD create 'dice' crd if not exists yet
@@ -39,10 +41,11 @@ func CreateCRD(config *rest.Config) error {
 	if err != nil {
 		return err
 	}
+
 	crd := apiextensionv1beta1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: CRDFullname},
+		ObjectMeta: metav1.ObjectMeta{Name: GetCRDFullName()},
 		Spec: apiextensionv1beta1.CustomResourceDefinitionSpec{
-			Group: CRDGroup,
+			Group: GetCRDGroup(),
 			Versions: []apiextensionv1beta1.CustomResourceDefinitionVersion{{
 				Name:    CRDVersion,
 				Served:  true,
@@ -50,9 +53,9 @@ func CreateCRD(config *rest.Config) error {
 			}},
 			Scope: apiextensionv1beta1.NamespaceScoped,
 			Names: apiextensionv1beta1.CustomResourceDefinitionNames{
-				Plural:   CRDPlural,
-				Singular: CRDSingular,
-				Kind:     CRDKind,
+				Plural:   GetCRDPlural(),
+				Singular: GetCRDSingular(),
+				Kind:     GetCRDKind(),
 			},
 			AdditionalPrinterColumns: []apiextensionv1beta1.CustomResourceColumnDefinition{
 				{
@@ -78,4 +81,43 @@ func CreateCRD(config *rest.Config) error {
 		return nil
 	}
 	return err
+}
+
+func GetCRDPlural() string {
+	if os.Getenv(CRDKindSpecified) != "" {
+		return fmt.Sprintf("%ss", strings.ToLower(os.Getenv(CRDKindSpecified)))
+	}
+	return CRDPlural
+}
+
+func GetCRDSingular() string {
+	if os.Getenv(CRDKindSpecified) != "" {
+		return fmt.Sprintf("%s", strings.ToLower(os.Getenv(CRDKindSpecified)))
+	}
+	return CRDSingular
+}
+
+func GetCRDKind() string {
+	if os.Getenv(CRDKindSpecified) != "" {
+		return os.Getenv(CRDKindSpecified)
+	}
+	return CRDKind
+}
+
+func GetCRDGroup() string {
+	if os.Getenv(CRDKindSpecified) != "" {
+		return fmt.Sprintf("%s.terminus.io", strings.ToLower(os.Getenv(CRDKindSpecified)))
+	}
+	return CRDGroup
+}
+
+func GetCRDFullName() string {
+	plural := GetCRDPlural()
+	group := GetCRDGroup()
+	return fmt.Sprintf("%s.%s", plural, group)
+}
+
+func GetCRDGroupVersion() string {
+	group := GetCRDGroup()
+	return fmt.Sprintf("%s/%s", group, CRDVersion)
 }
