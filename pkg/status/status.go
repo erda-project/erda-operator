@@ -62,9 +62,9 @@ func UpdateComponentStatus(client rest.Interface, namespace, name string, status
 
 func auxUpdateStatus(client rest.Interface, namespace, name string, f func(old spec.ClusterStatus) spec.ClusterStatus) error {
 	raw, err := client.Get().
-		Prefix("apis", crd.CRDGroupVersion).
+		Prefix("apis", crd.GetCRDGroupVersion()).
 		Namespace(namespace).
-		Resource(crd.CRDPlural).
+		Resource(crd.GetCRDPlural()).
 		Name(name).
 		DoRaw(context.Background())
 	if err != nil {
@@ -86,9 +86,9 @@ func auxUpdateStatus(client rest.Interface, namespace, name string, f func(old s
 		return err
 	}
 	r, err := client.Put().
-		Prefix("apis", crd.CRDGroupVersion).
+		Prefix("apis", crd.GetCRDGroupVersion()).
 		Namespace(namespace).
-		Resource(crd.CRDPlural).
+		Resource(crd.GetCRDPlural()).
 		Name(name).
 		SubResource("status").
 		Body(after).
@@ -102,9 +102,9 @@ func auxUpdateStatus(client rest.Interface, namespace, name string, f func(old s
 
 func RevertResetStatus(client rest.Interface, namespace, name string) error {
 	raw, err := client.Get().
-		Prefix("apis", crd.CRDGroupVersion).
+		Prefix("apis", crd.GetCRDGroupVersion()).
 		Namespace(namespace).
-		Resource(crd.CRDPlural).
+		Resource(crd.GetCRDPlural()).
 		Name(name).
 		DoRaw(context.Background())
 	if err != nil {
@@ -122,9 +122,9 @@ func RevertResetStatus(client rest.Interface, namespace, name string) error {
 		return err
 	}
 	r, err := client.Put().
-		Prefix("apis", crd.CRDGroupVersion).
+		Prefix("apis", crd.GetCRDGroupVersion()).
 		Namespace(namespace).
-		Resource(crd.CRDPlural).
+		Resource(crd.GetCRDPlural()).
 		Name(name).
 		Body(after).
 		DoRaw(context.Background())
