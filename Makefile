@@ -20,7 +20,7 @@ else
 endif
 
 BUILD_DIR := ./build
-TARGETS_DIR := erda-operator
+TARGETS_DIR := dice-operator
 IMAGE_PREFIX ?= $(strip )
 IMAGE_SUFFIX ?= $(strip )
 
