@@ -155,7 +155,7 @@ func BuildDaemonSet(
 					Annotations: dicesvc.Annotations,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: deployment.GenSAName(dicesvcname),
+					ServiceAccountName: utils.GenSAName(dicesvcname),
 					Containers: []corev1.Container{{
 						Name:            dicesvcname,
 						EnvFrom:         deployment.EnvsFrom(clus),
