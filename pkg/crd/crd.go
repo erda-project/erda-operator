@@ -27,10 +27,10 @@ import (
 )
 
 const (
-	CRDKind          string = "Erda"
-	CRDSingular      string = "erda"
-	CRDPlural        string = "erdas"
-	CRDGroup         string = "erda.terminus.io"
+	CRDKind          string = "Dice"
+	CRDSingular      string = "dice"
+	CRDPlural        string = "dices"
+	CRDGroup         string = "dice.terminus.io"
 	CRDVersion       string = "v1beta1"
 	CRDKindSpecified string = "CRD_KIND_SPECIFIED"
 )
