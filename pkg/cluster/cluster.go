@@ -162,7 +162,7 @@ func buildOwnerRefs(clus *spec.DiceCluster) []metav1.OwnerReference {
 	isController := true
 	return []metav1.OwnerReference{{
 		APIVersion:         crd.GetCRDGroupVersion(),
-		Kind:               crd.CRDKind,
+		Kind:               crd.GetCRDKind(),
 		Name:               clus.Name,
 		UID:                clus.GetUID(),
 		BlockOwnerDeletion: &blockOwnerDeletion,
