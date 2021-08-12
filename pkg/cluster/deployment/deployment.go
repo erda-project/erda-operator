@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/erda-project/dice-operator/pkg/cluster/diff"
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
@@ -35,12 +34,12 @@ import (
 )
 
 const (
-	EnableAffinity                  = "ENABLE_AFFINITY"
-	EnableSpecifiedNamespace        = "ENABLE_SPECIFIED_NAMESPACE"
-	EnableEtcdSecret                = "ENABLE_ETCD_SECRET"
-	EtcdSecretName                  = "ETCD_SECRET_NAME"
-	DefaultSecretName               = "erda-etcd-client-secret"
-	CRDKindSpecified         string = "CRD_KIND_SPECIFIED"
+	EnableAffinity           = "ENABLE_AFFINITY"
+	EnableSpecifiedNamespace = "ENABLE_SPECIFIED_NAMESPACE"
+	EnableEtcdSecret         = "ENABLE_ETCD_SECRET"
+	EtcdSecretName           = "ETCD_SECRET_NAME"
+	DefaultSecretName        = "erda-etcd-client-secret"
+	CRDKindSpecified         = "CRD_KIND_SPECIFIED"
 )
 
 func GenName(dicesvcname string, clus *spec.DiceCluster) string {
@@ -175,7 +174,7 @@ func BuildDeployment(
 					Annotations: dicesvc.Annotations,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: GenSAName(dicesvcname),
+					ServiceAccountName: utils.GenSAName(dicesvcname),
 					Containers: []corev1.Container{
 						{
 							Name:            dicesvcname,
@@ -226,17 +225,6 @@ func BuildDeployment(
 		deploy.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
 	}
 	return deploy, nil
-}
-
-func GenSAName(diceSvcName string) string {
-	if diceSvcName == diff.ClusterAgent {
-		return diceSvcName
-	}
-
-	if os.Getenv(CRDKindSpecified) != "" {
-		return strings.ToLower(os.Getenv(CRDKindSpecified)) + "-operator"
-	}
-	return "erda-operator"
 }
 
 func EnvsFrom(clus *spec.DiceCluster) []corev1.EnvFromSource {
