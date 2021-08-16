@@ -19,7 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/erda-project/dice-operator/pkg/conf"
 	"github.com/erda-project/dice-operator/pkg/controller"
@@ -36,10 +36,11 @@ func Initialize() {
 		logrus.SetLevel(logrus.DebugLevel)
 		logrus.Debug("DEBUG MODE")
 	}
-	config, err := rest.InClusterConfig()
+	config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBE_CONFIG_PATH"))
 	if err != nil {
 		logrus.Fatalf("Failed to create config: %v", err)
 	}
+
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		logrus.Fatalf("Failed to create client: %v", err)

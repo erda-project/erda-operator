@@ -92,14 +92,8 @@ func CreateOrUpdate(
 func Delete(
 	client kubernetes.Interface,
 	dicesvcname string,
-	dicesvc *diceyml.Service,
-	clus *spec.DiceCluster,
-	ownerRefs []metav1.OwnerReference) error {
-	deploy, err := BuildDeployment(dicesvcname, dicesvc, clus, ownerRefs)
-	if err != nil {
-		return err
-	}
-	return client.AppsV1().Deployments(clus.Namespace).Delete(context.Background(), deploy.Name, metav1.DeleteOptions{})
+	clus *spec.DiceCluster) error {
+	return client.AppsV1().Deployments(clus.Namespace).Delete(context.Background(), GenName(dicesvcname, clus), metav1.DeleteOptions{})
 }
 
 func BuildDeployment(

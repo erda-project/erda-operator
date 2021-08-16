@@ -85,38 +85,39 @@ func (l *Launcher) Launch() error {
 	}
 
 	if err := l.launchTmpStuff(); err != nil {
-		logrus.Errorf("%v", err)
+		logrus.Errorf("launch tmp stuff err: %v", err)
 		return err
 	}
 
 	var failed bool
+	var errMsg string
 	if err := l.MultiLaunch(l.Actions.UpdatedServices, l.launchUpdatedService, UpdateService); err != nil {
-		logrus.Errorf("%v", err)
+		errMsg = errMsg + fmt.Sprintf("update service err %v;", err)
 		failed = true
 	}
 	if err := l.MultiLaunch(l.Actions.DeletedServices, l.launchDeletedService, DeleteService); err != nil {
-		logrus.Errorf("%v", err)
+		errMsg = errMsg + fmt.Sprintf("delete service err %v;", err)
 		failed = true
 	}
 	if err := l.MultiLaunch(l.Actions.AddedServices, l.launchAddedService, AddService); err != nil {
-		logrus.Errorf("%v", err)
+		errMsg = errMsg + fmt.Sprintf("add service err %v;", err)
 		failed = true
 	}
 	if err := l.MultiLaunch(l.Actions.UpdatedDaemonSet, l.launchUpdatedDS, UpdateDaemonSet); err != nil {
-		logrus.Errorf("%v", err)
+		errMsg = errMsg + fmt.Sprintf("update daemonset err %v;", err)
 		failed = true
 	}
 	if err := l.MultiLaunch(l.Actions.DeletedDaemonSet, l.launchDeletedDS, DeleteDaemonSet); err != nil {
-		logrus.Errorf("%v", err)
+		errMsg = errMsg + fmt.Sprintf("delete daemonset err %v;", err)
 		failed = true
 	}
 	if err := l.MultiLaunch(l.Actions.AddedDaemonSet, l.LaunchAddedDS, AddDaemonSet); err != nil {
-		logrus.Errorf("%v", err)
+		errMsg = errMsg + fmt.Sprintf("add daemonset err %v;", err)
 		failed = true
 	}
 
 	if failed {
-		return errors.New("launch failed")
+		return errors.New("launch failed " + errMsg)
 	}
 
 	return nil
@@ -304,24 +305,21 @@ func (l *Launcher) launchUpdatedService(c chan result, svcName string, diceSvc *
 }
 
 func (l *Launcher) launchDeletedService(c chan result, svcName string, diceSvc *diceyml.Service) {
-	if err := deployment.Delete(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
+	if err := deployment.Delete(l.client, svcName, l.targetspec); err != nil {
 		msg := fmt.Sprintf("Failed to delete deployment: dicesvc: %s, err: %v", svcName, err)
 		c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 		return
 	}
 
-	if err := service.Delete(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
+	if err := service.Delete(l.client, svcName, diceSvc, l.targetspec); err != nil {
 		msg := fmt.Sprintf("Failed to delete service: dicesvc: %s, err: %v", svcName, err)
 		c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 		return
 	}
-
-	if ingress.HasIngress(diceSvc) {
-		if err := ingress.Delete(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
-			msg := fmt.Sprintf("Failed to delete ingress: dicesvc: %s, err: %v", svcName, err)
-			c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
-			return
-		}
+	if err := ingress.Delete(l.client, svcName, l.targetspec); err != nil {
+		msg := fmt.Sprintf("Failed to delete ingress: dicesvc: %s, err: %v", svcName, err)
+		c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
+		return
 	}
 
 	msg := fmt.Sprintf("check %s done", svcName)
