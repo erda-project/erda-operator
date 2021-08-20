@@ -61,40 +61,41 @@ func sprintMapKeys(m map[string]*diceyml.Service) string {
 func (c *Syncer) Sync() {
 	actions := diff.NewSpecDiff(nil, c.target).GetActions()
 	deployments := actions.AddedServices
+
 	daemonsets := actions.AddedDaemonSet
 
-	dsNeedToUpdate, dsNeedToAdd, err := c.checkDaemonsets(daemonsets)
+	dsNeedToUpdate, dsNeedToAdd, dsNeedToDelete, err := c.checkDaemonsets(daemonsets)
 	if err != nil {
 		logrus.Errorf("Failed to Sync: %v", err)
 		return
 	}
-	if len(dsNeedToUpdate)+len(dsNeedToAdd) > 0 {
-		logrus.Infof("sync daemonsets: UPDATE: %s, ADD: %v",
-			sprintMapKeys(dsNeedToUpdate), sprintMapKeys(dsNeedToAdd))
+	if len(dsNeedToUpdate)+len(dsNeedToAdd)+len(dsNeedToDelete) > 0 {
+		logrus.Infof("sync daemonsets: UPDATE: %s, ADD: %v, DELETE: %v",
+			sprintMapKeys(dsNeedToUpdate), sprintMapKeys(dsNeedToAdd), sprintMapKeys(dsNeedToDelete))
 	}
-	deployNeedToUpdate, deployNeedToAdd, err := c.checkDeployments(deployments)
+	deployNeedToUpdate, deployNeedToAdd, deployNeedToDelete, err := c.checkDeployments(deployments)
 	if err != nil {
 		logrus.Errorf("Failed to Sync: %v", err)
 		return
 	}
-	if len(deployNeedToUpdate)+len(deployNeedToAdd) > 0 {
-		logrus.Infof("sync deployments: UPDATE: %v, ADD: %v",
-			sprintMapKeys(deployNeedToUpdate), sprintMapKeys(deployNeedToAdd))
+	if len(deployNeedToUpdate)+len(deployNeedToAdd)+len(deployNeedToDelete) > 0 {
+		logrus.Infof("sync deployments: UPDATE: %v, ADD: %v, DELETE: %v",
+			sprintMapKeys(deployNeedToUpdate), sprintMapKeys(deployNeedToAdd), sprintMapKeys(deployNeedToDelete))
 	}
 
 	syncactions := diff.Actions{
 		AddedServices:    deployNeedToAdd,
 		UpdatedServices:  deployNeedToUpdate,
-		DeletedServices:  make(map[string]*diceyml.Service),
+		DeletedServices:  deployNeedToDelete,
 		AddedDaemonSet:   dsNeedToAdd,
 		UpdatedDaemonSet: dsNeedToUpdate,
-		DeletedDaemonSet: make(map[string]*diceyml.Service),
+		DeletedDaemonSet: dsNeedToDelete,
 	}
 
 	launcher := launch.NewLauncher(&syncactions,
 		c.target, c.clus.ownerRefs, c.k8sclient, c.restclient, c.target.Status.Phase)
 	if err := launcher.Launch(); err != nil {
-		logrus.Printf("lunch failed when sync, err: %s", err)
+		logrus.Printf("launch failed when sync, err: %s", err)
 	}
 	if err := status.New(c.k8sclient, c.restclient, c.target).Update(c.target.Name); err != nil {
 		logrus.Errorf("status updater err: %v", err)
@@ -102,9 +103,10 @@ func (c *Syncer) Sync() {
 }
 
 func (c *Syncer) checkDeployments(dicesvcs map[string]*diceyml.Service) (
-	needToUpdate, needToAdd map[string]*diceyml.Service, err error) {
+	needToUpdate, needToAdd, needToDelete map[string]*diceyml.Service, err error) {
 	needToUpdate = make(map[string]*diceyml.Service)
 	needToAdd = make(map[string]*diceyml.Service)
+	needToDelete = make(map[string]*diceyml.Service)
 
 	var deploylist *appsv1.DeploymentList
 	deploylist, err = c.k8sclient.AppsV1().Deployments(c.target.Namespace).
@@ -114,19 +116,16 @@ func (c *Syncer) checkDeployments(dicesvcs map[string]*diceyml.Service) (
 		return
 	}
 
-	currentDeployList := []*appsv1.Deployment{}
-	for i := range deploylist.Items {
-		currentDeployList = append(currentDeployList, &deploylist.Items[i])
-	}
+	currentDeployList := deploylist.Items
 
-	generatedDeployList := []*appsv1.Deployment{}
+	generatedDeployList := []appsv1.Deployment{}
 	for name, dicesvc := range dicesvcs {
 		var deploy *appsv1.Deployment
 		deploy, err = deployment.BuildDeployment(name, dicesvc, c.target, c.clus.ownerRefs)
 		if err != nil {
 			return
 		}
-		generatedDeployList = append(generatedDeployList, deploy)
+		generatedDeployList = append(generatedDeployList, *deploy)
 	}
 	actions := diff.NewDeploymentListDiff(currentDeployList, generatedDeployList).GetActions()
 	componentStatusMap := map[string]spec.ComponentStatus{}
@@ -141,6 +140,11 @@ func (c *Syncer) checkDeployments(dicesvcs map[string]*diceyml.Service) (
 		dicesvcname := deployment.ExtractDiceSvcName(deploy.Name)
 		needToAdd[dicesvcname] = dicesvcs[dicesvcname]
 		componentStatusMap[dicesvcname] = spec.ComponentStatusNeedCreateOrUpdate
+	}
+
+	for _, deploy := range actions.DeletedDeployments {
+		dicesvcname := deployment.ExtractDiceSvcName(deploy.Name)
+		needToDelete[dicesvcname] = dicesvcs[dicesvcname]
 	}
 
 	for i := range deploylist.Items {
@@ -170,9 +174,10 @@ func (c *Syncer) checkDeployments(dicesvcs map[string]*diceyml.Service) (
 }
 
 func (c *Syncer) checkDaemonsets(dicesvcs map[string]*diceyml.Service) (
-	needToUpdate, needToAdd map[string]*diceyml.Service, err error) {
+	needToUpdate, needToAdd, needToDelete map[string]*diceyml.Service, err error) {
 	needToUpdate = make(map[string]*diceyml.Service)
 	needToAdd = make(map[string]*diceyml.Service)
+	needToDelete = make(map[string]*diceyml.Service)
 
 	var dslist *appsv1.DaemonSetList
 	dslist, err = c.k8sclient.AppsV1().DaemonSets(c.target.Namespace).
@@ -181,18 +186,15 @@ func (c *Syncer) checkDaemonsets(dicesvcs map[string]*diceyml.Service) (
 	if err != nil {
 		return
 	}
-	currentDSList := []*appsv1.DaemonSet{}
-	for i := range dslist.Items {
-		currentDSList = append(currentDSList, &dslist.Items[i])
-	}
-	generatedDSList := []*appsv1.DaemonSet{}
+	currentDSList := dslist.Items
+	generatedDSList := []appsv1.DaemonSet{}
 	for name, dicesvc := range dicesvcs {
 		var ds *appsv1.DaemonSet
 		ds, err = daemonset.BuildDaemonSet(name, dicesvc, c.target, c.clus.ownerRefs)
 		if err != nil {
 			return
 		}
-		generatedDSList = append(generatedDSList, ds)
+		generatedDSList = append(generatedDSList, *ds)
 	}
 	actions := diff.NewDaemonsetListDiff(currentDSList, generatedDSList).GetActions()
 
@@ -203,6 +205,10 @@ func (c *Syncer) checkDaemonsets(dicesvcs map[string]*diceyml.Service) (
 	for _, ds := range actions.AddedDaemonsets {
 		dicesvcname := daemonset.ExtractDiceSvcName(ds.Name)
 		needToAdd[dicesvcname] = dicesvcs[dicesvcname]
+	}
+	for _, ds := range actions.DeletedDaemonsets {
+		dicesvcname := daemonset.ExtractDiceSvcName(ds.Name)
+		needToDelete[dicesvcname] = dicesvcs[dicesvcname]
 	}
 
 	return

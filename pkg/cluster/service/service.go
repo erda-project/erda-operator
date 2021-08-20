@@ -76,13 +76,11 @@ func Delete(
 	client kubernetes.Interface,
 	dicesvcname string,
 	dicesvc *diceyml.Service,
-	clus *spec.DiceCluster,
-	ownerRefs []metav1.OwnerReference) error {
-	if len(dicesvc.Ports) == 0 {
+	clus *spec.DiceCluster) error {
+	if dicesvc != nil && len(dicesvc.Ports) == 0 {
 		return nil
 	}
-	generatedSvc := buildService(dicesvcname, dicesvc, clus, ownerRefs)
-	err := client.CoreV1().Services(clus.Namespace).Delete(context.Background(), generatedSvc.Name, metav1.DeleteOptions{})
+	err := client.CoreV1().Services(clus.Namespace).Delete(context.Background(), convertServiceName(dicesvcname), metav1.DeleteOptions{})
 	if errors.IsNotFound(err) {
 		return nil
 	}
