@@ -29,16 +29,16 @@ type DeploymentListDiff struct {
 	targetDeployments  map[string]appsv1.Deployment
 }
 
-func NewDeploymentListDiff(current, target []*appsv1.Deployment) *DeploymentListDiff {
+func NewDeploymentListDiff(current, target []appsv1.Deployment) *DeploymentListDiff {
 	currentDeployments := map[string]appsv1.Deployment{}
 	targetDeployments := map[string]appsv1.Deployment{}
 
 	for _, deploy := range current {
-		currentDeployments[deploy.Name] = *deploy
+		currentDeployments[deploy.Name] = deploy
 	}
 
 	for _, deploy := range target {
-		targetDeployments[deploy.Name] = *deploy
+		targetDeployments[deploy.Name] = deploy
 	}
 
 	return &DeploymentListDiff{
