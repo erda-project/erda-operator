@@ -29,6 +29,9 @@ import (
 )
 
 func HasIngress(dicesvc *diceyml.Service) bool {
+	if dicesvc == nil {
+		return false
+	}
 	return len(dicesvc.Expose) > 0
 }
 
@@ -93,14 +96,8 @@ func GenHTTPIngressPaths(diceSvcName string, exposePort int) []extensions.HTTPIn
 func Delete(
 	client kubernetes.Interface,
 	dicesvcname string,
-	dicesvc *diceyml.Service,
-	clus *spec.DiceCluster,
-	ownerRefs []metav1.OwnerReference) error {
-	generatedIngress, err := buildIngress(dicesvcname, dicesvc, clus, ownerRefs)
-	if err != nil {
-		return err
-	}
-	err = client.ExtensionsV1beta1().Ingresses(clus.Namespace).Delete(context.Background(), generatedIngress.Name, metav1.DeleteOptions{})
+	clus *spec.DiceCluster) error {
+	err := client.ExtensionsV1beta1().Ingresses(clus.Namespace).Delete(context.Background(), dicesvcname, metav1.DeleteOptions{})
 	if errors.IsNotFound(err) {
 		return nil
 	}

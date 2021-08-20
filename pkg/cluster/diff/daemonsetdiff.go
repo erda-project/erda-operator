@@ -30,15 +30,15 @@ type DaemonsetListDiff struct {
 	targetDaemonsets  map[string]appsv1.DaemonSet
 }
 
-func NewDaemonsetListDiff(current, target []*appsv1.DaemonSet) *DaemonsetListDiff {
+func NewDaemonsetListDiff(current, target []appsv1.DaemonSet) *DaemonsetListDiff {
 	currentDaemonsets := map[string]appsv1.DaemonSet{}
 	targetDaemonsets := map[string]appsv1.DaemonSet{}
 
 	for _, ds := range current {
-		currentDaemonsets[ds.Name] = *ds
+		currentDaemonsets[ds.Name] = ds
 	}
 	for _, ds := range target {
-		targetDaemonsets[ds.Name] = *ds
+		targetDaemonsets[ds.Name] = ds
 	}
 	return &DaemonsetListDiff{
 		currentDaemonsets: currentDaemonsets,
