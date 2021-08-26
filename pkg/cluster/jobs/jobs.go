@@ -60,7 +60,7 @@ func CreateAndWait(
 			}
 			return err
 		}
-		ctx, _ := context.WithTimeout(context.Background(), 300*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 60*time.Minute)
 		if err := check.UntilJobFinished(ctx, client, clus.Namespace, job.Name); err != nil {
 			return err
 		}

@@ -3,6 +3,7 @@ module github.com/erda-project/dice-operator
 go 1.16
 
 replace (
+	github.com/googlecloudplatform/flink-operator => github.com/johnlanni/flink-on-k8s-operator v0.0.0-20210228210718-0310df76d6e2
 	github.com/influxdata/influxql => github.com/erda-project/influxql v1.1.0-ex
 	github.com/rancher/remotedialer => github.com/erda-project/remotedialer v0.2.6-0.20210518122121-2ff7d3d4deea
 	k8s.io/api => k8s.io/api v0.18.3
@@ -34,13 +35,13 @@ replace (
 )
 
 require (
-	github.com/erda-project/erda v1.0.1
-	github.com/erda-project/erda-infra v0.0.0-20210709120204-7091e4656382
+	github.com/erda-project/erda v1.2.0-rc.0.20210826043054-3e6789d78994
+	github.com/erda-project/erda-infra v0.0.0-20210825095053-85c5451901ed
 	github.com/google/go-cmp v0.5.6
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
-	k8s.io/api v0.19.1
-	k8s.io/apiextensions-apiserver v0.18.2
-	k8s.io/apimachinery v0.19.1
+	k8s.io/api v0.21.2
+	k8s.io/apiextensions-apiserver v0.21.2
+	k8s.io/apimachinery v0.21.2
 	k8s.io/client-go v12.0.0+incompatible
 )
