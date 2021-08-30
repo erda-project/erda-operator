@@ -173,7 +173,6 @@ func (l *Launcher) launchTmpStuff() error {
 			if _, err := l.client.ExtensionsV1beta1().Ingresses(l.targetspec.Namespace).Create(context.Background(), &ing, metav1.CreateOptions{}); err != nil {
 				return err
 			}
-
 		}
 
 	}
@@ -246,11 +245,11 @@ func (l *Launcher) launchAddedService(c chan result, svcName string, diceSvc *di
 		return
 	}
 
-	// check deployment ready, timeout 100s
-	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
+	// check deployment ready, timeout 60m
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Minute)
 	err := check.UntilDeploymentReady(ctx, l.client, l.targetspec.Namespace, deployment.GenName(svcName, l.targetspec))
 	if err == context.DeadlineExceeded {
-		msg := fmt.Sprintf("dicesvc: %s, check deployment available timeout(100s)", svcName)
+		msg := fmt.Sprintf("dicesvc: %s, check deployment available timeout(60m)", svcName)
 		c <- result{svcName, msg, false, l.phase}
 		return
 	}
@@ -286,11 +285,11 @@ func (l *Launcher) launchUpdatedService(c chan result, svcName string, diceSvc *
 		return
 	}
 
-	// check deployment ready, timeout 100s
-	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
+	// check deployment ready, timeout 60m
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Minute)
 	err := check.UntilDeploymentReady(ctx, l.client, l.targetspec.Namespace, deployment.GenName(svcName, l.targetspec))
 	if err == context.DeadlineExceeded {
-		msg := fmt.Sprintf("dicesvc: %s, check deployment available timeout(100s)", svcName)
+		msg := fmt.Sprintf("dicesvc: %s, check deployment available timeout(60m)", svcName)
 		c <- result{svcName, msg, false, l.phase}
 		return
 	}
@@ -333,11 +332,11 @@ func (l *Launcher) LaunchAddedDS(c chan result, svcName string, diceSvc *diceyml
 		return
 	}
 
-	// check DaemonSet ready, timeout 100s
-	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
+	// check DaemonSet ready, timeout 60m
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Minute)
 	err := check.UntilDaemonsetReady(ctx, l.client, l.targetspec.Namespace, daemonset.GenName(svcName, l.targetspec))
 	if err == context.DeadlineExceeded {
-		msg := fmt.Sprintf("Failed to deploy daemonset: dicesvc: %s, check daemonset timeout(100s)", svcName)
+		msg := fmt.Sprintf("Failed to deploy daemonset: dicesvc: %s, check daemonset timeout(60m)", svcName)
 		c <- result{svcName, msg, false, l.phase}
 		return
 	}
@@ -358,11 +357,11 @@ func (l *Launcher) launchUpdatedDS(c chan result, svcName string, diceSvc *dicey
 		return
 	}
 
-	// check daemonSet ready, timeout 100s
-	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
+	// check daemonSet ready, timeout 60m
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Minute)
 	err := check.UntilDaemonsetReady(ctx, l.client, l.targetspec.Namespace, daemonset.GenName(svcName, l.targetspec))
 	if err == context.DeadlineExceeded {
-		msg := fmt.Sprintf("Failed to update daemonset: dicesvc: %s, check daemonset timeout(100s)", svcName)
+		msg := fmt.Sprintf("Failed to update daemonset: dicesvc: %s, check daemonset timeout(60m)", svcName)
 		c <- result{svcName, msg, false, l.phase}
 		return
 	}
