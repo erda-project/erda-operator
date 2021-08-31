@@ -794,6 +794,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 }
 
 func diffDice(current, target diceyml.Object, specdiff *SpecDiff) {
+
 	diffDiceGlobalEnv(current.Envs, target.Envs, specdiff)
 	diffDiceServices(current.Services, target.Services, specdiff)
 }

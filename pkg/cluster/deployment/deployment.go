@@ -15,9 +15,12 @@ package deployment
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +42,8 @@ const (
 	EnableEtcdSecret         = "ENABLE_ETCD_SECRET"
 	EtcdSecretName           = "ETCD_SECRET_NAME"
 	DefaultSecretName        = "erda-etcd-client-secret"
-	CRDKindSpecified         = "CRD_KIND_SPECIFIED"
+	CPUBound                 = "cpu_bound"
+	IOBound                  = "io_bound"
 )
 
 func GenName(dicesvcname string, clus *spec.DiceCluster) string {
@@ -73,18 +77,32 @@ func CreateOrUpdate(
 	dicesvc *diceyml.Service,
 	clus *spec.DiceCluster,
 	ownerRefs []metav1.OwnerReference) (*appsv1.Deployment, error) {
+
 	generatedDeploy, err := BuildDeployment(dicesvcname, dicesvc, clus, ownerRefs)
 	if err != nil {
 		return nil, err
 	}
-	_, err = client.AppsV1().Deployments(clus.Namespace).Get(context.Background(), generatedDeploy.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return client.AppsV1().Deployments(clus.Namespace).Create(context.Background(), generatedDeploy, metav1.CreateOptions{})
-	}
-	deploy, err := client.AppsV1().Deployments(clus.Namespace).Update(context.Background(), generatedDeploy, metav1.UpdateOptions{})
-	if errors.IsForbidden(err) || errors.IsInvalid(err) {
-		client.AppsV1().Deployments(clus.Namespace).Delete(context.Background(), generatedDeploy.Name, metav1.DeleteOptions{})
-		return client.AppsV1().Deployments(clus.Namespace).Create(context.Background(), generatedDeploy, metav1.CreateOptions{})
+	deploy, err := client.AppsV1().Deployments(clus.Namespace).Get(context.Background(), generatedDeploy.Name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			deploy, err = client.AppsV1().Deployments(clus.Namespace).Create(context.Background(), generatedDeploy, metav1.CreateOptions{})
+		} else {
+			return nil, err
+		}
+	} else {
+		deploy, err = client.AppsV1().Deployments(clus.Namespace).Update(context.Background(), generatedDeploy, metav1.UpdateOptions{})
+		if err != nil {
+			if errors.IsForbidden(err) || errors.IsInvalid(err) {
+				err = client.AppsV1().Deployments(clus.Namespace).Delete(context.Background(), generatedDeploy.Name, metav1.DeleteOptions{})
+				if err != nil && !errors.IsNotFound(err) {
+					return nil, err
+				}
+				deploy, err = client.AppsV1().Deployments(clus.Namespace).Create(context.Background(), generatedDeploy, metav1.CreateOptions{})
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 	return deploy, nil
 }
@@ -210,7 +228,9 @@ func BuildDeployment(
 	}
 
 	if os.Getenv(EnableAffinity) != "false" {
-		deploy.Spec.Template.Spec.Affinity = ComposeAffinity(affinity, dicesvcname)
+		deploy.Spec.Template.Spec.Affinity = ComposeAffinity(affinity, dicesvcname, dicesvc)
+		SetBoundLabels(CPUBound, dicesvc, deploy)
+		SetBoundLabels(IOBound, dicesvc, deploy)
 	}
 
 	if deploy.Spec.Template.Spec.HostNetwork {
@@ -218,6 +238,16 @@ func BuildDeployment(
 	} else {
 		deploy.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
 	}
+
+	if dicesvc.K8SSnippet != nil && dicesvc.K8SSnippet.Container != nil {
+		dicesvc.K8SSnippet.Container.Name = dicesvcname
+		newContainer, err := PatchContainer(deploy.Spec.Template.Spec.Containers[0], (corev1.Container)(*dicesvc.K8SSnippet.Container))
+		if err != nil {
+			return nil, err
+		}
+		deploy.Spec.Template.Spec.Containers[0] = *newContainer
+	}
+
 	return deploy, nil
 }
 
@@ -242,8 +272,25 @@ func EnvsFrom(clus *spec.DiceCluster) []corev1.EnvFromSource {
 	}
 }
 
-func ComposeAffinity(affinity []corev1.NodeSelectorRequirement, dicesvcname string) *corev1.Affinity {
-	return &corev1.Affinity{
+func PatchContainer(originContainer, patchContainer corev1.Container) (*corev1.Container, error) {
+	newContainer := originContainer
+	patchBytes, err := json.Marshal(patchContainer)
+	if err != nil {
+		errMsg := fmt.Sprintf("marshal patch container failed: %v", err)
+		logrus.Error(errMsg)
+		return nil, fmt.Errorf(errMsg)
+	}
+	err = json.Unmarshal(patchBytes, &newContainer)
+	if err != nil {
+		errMsg := fmt.Sprintf("unmarshal patch container failed: %v", err)
+		logrus.Error(errMsg)
+		return nil, fmt.Errorf(errMsg)
+	}
+	return &newContainer, nil
+}
+
+func ComposeAffinity(affinity []corev1.NodeSelectorRequirement, dicesvcname string, dicesvc *diceyml.Service) *corev1.Affinity {
+	newAffinity := &corev1.Affinity{
 		NodeAffinity: &corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 				NodeSelectorTerms: []corev1.NodeSelectorTerm{{
@@ -298,20 +345,92 @@ func ComposeAffinity(affinity []corev1.NodeSelectorRequirement, dicesvcname stri
 			},
 		},
 		PodAntiAffinity: &corev1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{
-				Weight: 100,
-				PodAffinityTerm: corev1.PodAffinityTerm{
-					TopologyKey: "kubernetes.io/hostname",
-					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{{
-							Key:      "dice/component",
-							Operator: "In",
-							Values:   []string{dicesvcname},
-						}},
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						TopologyKey: "kubernetes.io/hostname",
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{{
+								Key:      "dice/component",
+								Operator: "In",
+								Values:   []string{dicesvcname},
+							}},
+						},
 					},
 				},
-			}},
+			},
 		},
+	}
+
+	preferredTerm := newAffinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+	_, cpuOK := dicesvc.Labels[CPUBound]
+	_, ioOK := dicesvc.Labels[IOBound]
+	if cpuOK && ioOK {
+		preferredTerm = append(preferredTerm,
+			corev1.WeightedPodAffinityTerm{
+				Weight: 100,
+				PodAffinityTerm: corev1.PodAffinityTerm{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "erda/" + CPUBound,
+								Operator: metav1.LabelSelectorOpExists,
+							},
+							{
+								Key:      "erda/" + IOBound,
+								Operator: metav1.LabelSelectorOpExists,
+							},
+						},
+					},
+					TopologyKey: "kubernetes.io/hostname",
+				},
+			},
+		)
+	} else {
+		preferredTerm = append(preferredTerm,
+			[]corev1.WeightedPodAffinityTerm{
+				{
+					Weight: 50,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      "erda/" + CPUBound,
+									Operator: metav1.LabelSelectorOpExists,
+								},
+							},
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+				{
+					Weight: 50,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      "erda/" + IOBound,
+									Operator: metav1.LabelSelectorOpExists,
+								},
+							},
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+			}...,
+		)
+	}
+	newAffinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = preferredTerm
+
+	return newAffinity
+}
+
+func SetBoundLabels(key string, service *diceyml.Service, deploy *appsv1.Deployment) {
+	if val, ok := service.Labels[key]; ok {
+		deploy.Labels["erda/"+key] = val
+		deploy.Spec.Selector.MatchLabels["erda/"+key] = val
+		deploy.Spec.Template.Labels["erda/"+key] = val
 	}
 }
 
