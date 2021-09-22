@@ -56,6 +56,11 @@ func UpdateComponentStatus(client rest.Interface, namespace, name string, status
 		for component, s := range status {
 			old.Components[component] = s
 		}
+		for k := range old.Components {
+			if _, ok := status[k]; !ok {
+				delete(old.Components, k)
+			}
+		}
 		return old
 	})
 }
