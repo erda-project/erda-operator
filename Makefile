@@ -13,6 +13,12 @@
 
 GO_PROJECT_ROOT := github.com/erda-project/erda
 
+ifeq ($(GO_PROXY_ENV),)
+	GO_PROXY := "https://proxy.golang.org,direct"
+else
+	GO_PROXY := $(GO_PROXY_ENV)
+endif
+
 ifeq ($(REGISTRY_HOST),)
     REGISTRY := registry.erda.cloud/erda
 else
@@ -35,6 +41,7 @@ container:
 	  image=$(IMAGE_PREFIX)$${target}$(IMAGE_SUFFIX);                                  \
 	  docker build -t $(REGISTRY)/$${image}:$(IMAGE_TAG)                               \
 	    --build-arg GO_PROJECT_ROOT=$(GO_PROJECT_ROOT)                                 \
+	    --build-arg GO_PROXY=$(GO_PROXY)                                 \
 	    --label $(DOCKER_LABELS)                                                       \
 	    -f $(BUILD_DIR)/$${target}/Dockerfile .;                                       \
 	done

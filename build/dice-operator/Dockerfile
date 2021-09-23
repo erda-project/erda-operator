@@ -1,12 +1,14 @@
 FROM registry.erda.cloud/erda/golang:1.16.6-stretch AS builder
 
 ARG GO_PROJECT_ROOT
+ARG GO_PROXY
 
 WORKDIR /go/src/${GO_PROJECT_ROOT}
 
 ENV GO111MODULE=on
-ENV GOPROXY=https://goproxy.cn,direct
 ENV GOPATH=/go
+
+RUN go env -w GOPROXY=${GO_PROXY}
 
 COPY go.mod go.mod
 COPY go.sum go.sum
