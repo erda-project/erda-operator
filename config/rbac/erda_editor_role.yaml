@@ -1,0 +1,24 @@
+# permissions for end users to edit erdas.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: erda-editor-role
+rules:
+- apiGroups:
+  - erda.terminus.io
+  resources:
+  - erdas
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - erda.terminus.io
+  resources:
+  - erdas/status
+  verbs:
+  - get
