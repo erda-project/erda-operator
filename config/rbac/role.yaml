@@ -1,0 +1,78 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: erda-operator
+rules:
+  - apiGroups:
+      - erda.terminus.io
+    resources:
+      - erdas
+      - erdas/status
+    verbs:
+      - '*'
+  - apiGroups:
+      - flinkoperator.k8s.io
+    resources:
+      - flinkclusters
+    verbs:
+      - '*'
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - events
+      - configmaps
+      - nodes
+      - secrets
+      - persistentvolumes
+      - persistentvolumeclaims
+      - namespaces
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - nodes/stats
+      - nodes/proxy
+      - nodes/metrics
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs:
+      - '*'
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - '*'
+  - apiGroups:
+      - extensions
+    resources:
+      - ingresses
+    verbs:
+      - '*'
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - '*'
+  - nonResourceURLs:
+      - /metrics
+    verbs:
+      - get

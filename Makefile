@@ -1,53 +1,108 @@
-# Copyright (c) 2021 Terminus, Inc.
-#
-# This program is free software: you can use, redistribute, and/or modify
-# it under the terms of the GNU Affero General Public License, version 3
-# or later ("AGPL"), as published by the Free Software Foundation.
-#
-# This program is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-# FITNESS FOR A PARTICULAR PURPOSE.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-GO_PROJECT_ROOT := github.com/erda-project/erda
+# Image URL to use all building/pushing image targets
+IMG ?= controller:latest
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
-ifeq ($(GO_PROXY_ENV),)
-	GO_PROXY := "https://proxy.golang.org,direct"
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
 else
-	GO_PROXY := $(GO_PROXY_ENV)
+GOBIN=$(shell go env GOBIN)
 endif
 
-ifeq ($(REGISTRY_HOST),)
-    REGISTRY := registry.erda.cloud/erda
-else
-    REGISTRY := $(REGISTRY_HOST)
-endif
+# Setting SHELL to bash allows bash commands to be executed by recipes.
+# This is a requirement for 'setup-envtest.sh' in the test target.
+# Options are set to exit when a recipe line exits non-zero or a piped command fails.
+SHELL = /usr/bin/env bash -o pipefail
+.SHELLFLAGS = -ec
 
-BUILD_DIR := ./build
-TARGETS_DIR := dice-operator
-IMAGE_PREFIX ?= $(strip )
-IMAGE_SUFFIX ?= $(strip )
+all: build
 
-IMAGE_TAG ?= "$(shell cat VERSION)-$(shell date -u +%Y%m%d)-$(shell git rev-parse --short HEAD --dirty)"
-DOCKER_LABELS ?= git-describe="$(shell cat VERSION)-$(shell date -u +%Y%m%d)-$(shell git rev-parse --short HEAD --dirty)"
+##@ General
 
-GO_OPTIONS ?= -mod=vendor -count=1
-SHELLOPTS := errexit
+# The help target prints out all targets with their descriptions organized
+# beneath their categories. The categories are represented by '##@' and the
+# target descriptions by '##'. The awk commands is responsible for reading the
+# entire set of makefiles included in this invocation, looking for lines of the
+# file as xyz: ## something, and then pretty-format the target and help. Then,
+# if there's a line with ##@ something, that gets pretty-printed as a category.
+# More info on the usage of ANSI control characters for terminal formatting:
+# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
+# More info on the awk command:
+# http://linuxcommand.org/lc3_adv_awk.php
 
-container:
-	@for target in $(TARGETS_DIR); do                                                  \
-	  image=$(IMAGE_PREFIX)$${target}$(IMAGE_SUFFIX);                                  \
-	  docker build -t $(REGISTRY)/$${image}:$(IMAGE_TAG)                               \
-	    --build-arg GO_PROJECT_ROOT=$(GO_PROJECT_ROOT)                                 \
-	    --build-arg GO_PROXY=$(GO_PROXY)                                 \
-	    --label $(DOCKER_LABELS)                                                       \
-	    -f $(BUILD_DIR)/$${target}/Dockerfile .;                                       \
-	done
+help: ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-push: container
-	@for target in $(TARGETS_DIR); do                                                  \
-	  image=$(IMAGE_PREFIX)$${target}$(IMAGE_SUFFIX);                                  \
-	  docker push $(REGISTRY)/$${image}:$(IMAGE_TAG);                                  \
-	done
+##@ Development
+
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+vet: ## Run go vet against code.
+	go vet ./...
+
+ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
+test: manifests generate fmt vet ## Run tests.
+	mkdir -p ${ENVTEST_ASSETS_DIR}
+	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.8.3/hack/setup-envtest.sh
+	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); go test ./... -coverprofile cover.out
+
+##@ Build
+
+build: generate fmt vet ## Build manager binary.
+	go build -o bin/manager main.go
+
+run: manifests generate fmt vet ## Run a controller from your host.
+	go run ./main.go
+
+docker-build: test ## Build docker image with the manager.
+	docker build -t ${IMG} .
+
+docker-push: ## Push docker image with the manager.
+	docker push ${IMG}
+
+##@ Deployment
+
+install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | kubectl delete -f -
+
+deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default | kubectl apply -f -
+
+undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/default | kubectl delete -f -
+
+
+CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+controller-gen: ## Download controller-gen locally if necessary.
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1)
+
+KUSTOMIZE = $(shell pwd)/bin/kustomize
+kustomize: ## Download kustomize locally if necessary.
+	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
+
+# go-get-tool will 'go get' any package $2 and install it to $1.
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+define go-get-tool
+@[ -f $(1) ] || { \
+set -e ;\
+TMP_DIR=$$(mktemp -d) ;\
+cd $$TMP_DIR ;\
+go mod init tmp ;\
+echo "Downloading $(2)" ;\
+GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+rm -rf $$TMP_DIR ;\
+}
+endef
