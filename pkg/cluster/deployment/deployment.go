@@ -44,6 +44,7 @@ const (
 	DefaultSecretName        = "erda-etcd-client-secret"
 	CPUBound                 = "cpu_bound"
 	IOBound                  = "io_bound"
+	ErdaClusterCredential    = "erda-cluster-credential"
 )
 
 func GenName(dicesvcname string, clus *spec.DiceCluster) string {
@@ -246,6 +247,26 @@ func BuildDeployment(
 			return nil, err
 		}
 		deploy.Spec.Template.Spec.Containers[0] = *newContainer
+	}
+
+	// TODO: erda.yaml support mount configmap/secret to directory
+	// telegraf, filebeat also need. pkg/cluster/daemonset/daemonset.go
+	if strings.Contains(dicesvcname, "filebeat") || strings.Contains(dicesvcname, "telegraf") {
+		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: ErdaClusterCredential,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: ErdaClusterCredential,
+				},
+			},
+		})
+
+		deploy.Spec.Template.Spec.Containers[0].VolumeMounts = append(deploy.Spec.Template.Spec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      ErdaClusterCredential,
+				ReadOnly:  true,
+				MountPath: ErdaClusterCredential,
+			})
 	}
 
 	return deploy, nil

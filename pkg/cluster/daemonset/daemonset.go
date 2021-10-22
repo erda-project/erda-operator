@@ -35,7 +35,8 @@ import (
 )
 
 const (
-	EnableAffinity = "ENABLE_AFFINITY"
+	EnableAffinity        = "ENABLE_AFFINITY"
+	ErdaClusterCredential = "erda-cluster-credential"
 )
 
 func GenName(dicesvcname string, clus *spec.DiceCluster) string {
@@ -188,6 +189,26 @@ func BuildDaemonSet(
 				},
 			},
 		},
+	}
+
+	// TODO: erda.yaml support mount configmap/secret to directory
+	// telegraf-platform also need. pkg/cluster/deployment/deployment.go
+	if strings.Contains(dicesvcname, "filebeat") || strings.Contains(dicesvcname, "telegraf") {
+		ds.Spec.Template.Spec.Volumes = append(ds.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: ErdaClusterCredential,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: ErdaClusterCredential,
+				},
+			},
+		})
+
+		ds.Spec.Template.Spec.Containers[0].VolumeMounts = append(ds.Spec.Template.Spec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      ErdaClusterCredential,
+				ReadOnly:  true,
+				MountPath: ErdaClusterCredential,
+			})
 	}
 
 	if os.Getenv(EnableAffinity) != "false" {
