@@ -44,6 +44,7 @@ container:
 	    --build-arg GO_PROXY=$(GO_PROXY)                                 \
 	    --label $(DOCKER_LABELS)                                                       \
 	    -f $(BUILD_DIR)/$${target}/Dockerfile .;                                       \
+	  echo "image=$(REGISTRY)/$${image}:$(IMAGE_TAG)" >> $${METAFILE};		   \
 	done
 
 push: container
