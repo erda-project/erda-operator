@@ -35,6 +35,7 @@ const (
 	telegrafPlatform = "telegraf-platform"
 	ClusterAgent     = "cluster-agent"
 	fdpMetaManager   = "fdp-metadata-manager"
+	fdpWorkflow      = "fdp-workflow"
 )
 
 type SpecDiff struct {
@@ -357,6 +358,7 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 		telegrafPlatform,
 		ClusterAgent,
 		fdpMetaManager,
+		fdpWorkflow,
 	}
 	sort.Strings(edgeSvcList)
 	f := func(m map[string]*diceyml.Service) {
