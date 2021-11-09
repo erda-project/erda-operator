@@ -178,8 +178,17 @@ func BuildDaemonSet(
 					ImagePullSecrets: []corev1.LocalObjectReference{{Name: "aliyun-registry"}},
 					Volumes:          vols,
 					HostNetwork:      dicesvc.Resources.Network["mode"] == "host",
-					Tolerations:      []corev1.Toleration{{Operator: "Exists"}},
-					HostAliases:      utils.ConvertToHostAlias(dicesvc.Hosts),
+					Tolerations: []corev1.Toleration{
+						{
+							Key:    "node-role.kubernetes.io/master",
+							Effect: corev1.TaintEffectNoSchedule,
+						},
+						{
+							Key:    "node-role.kubernetes.io/lb",
+							Effect: corev1.TaintEffectNoSchedule,
+						},
+					},
+					HostAliases: utils.ConvertToHostAlias(dicesvc.Hosts),
 				},
 			},
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
