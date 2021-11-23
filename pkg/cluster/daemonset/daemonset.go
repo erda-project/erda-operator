@@ -89,14 +89,8 @@ func CreateOrUpdate(
 func Delete(
 	client kubernetes.Interface,
 	dicesvcname string,
-	dicesvc *diceyml.Service,
-	clus *spec.DiceCluster,
-	ownerRefs []metav1.OwnerReference) error {
-	generatedDS, err := BuildDaemonSet(dicesvcname, dicesvc, clus, ownerRefs)
-	if err != nil {
-		return err
-	}
-	return client.AppsV1().DaemonSets(clus.Namespace).Delete(context.Background(), generatedDS.Name, metav1.DeleteOptions{})
+	clus *spec.DiceCluster) error {
+	return client.AppsV1().DaemonSets(clus.Namespace).Delete(context.Background(), GenName(dicesvcname, clus), metav1.DeleteOptions{})
 }
 
 func BuildDaemonSet(
@@ -104,10 +98,12 @@ func BuildDaemonSet(
 	dicesvc *diceyml.Service,
 	clus *spec.DiceCluster,
 	ownerRefs []metav1.OwnerReference) (*appsv1.DaemonSet, error) {
+
 	vols, volmounts, err := deployment.Volumes(dicesvc)
 	if err != nil {
 		return nil, err
 	}
+
 	livenessProbe, err := deployment.LivenessProbe(dicesvcname, dicesvc)
 	if err != nil {
 		return nil, err

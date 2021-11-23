@@ -26,6 +26,7 @@ import (
 
 const (
 	fdpAgent         = "fdp-agent"
+	fluentbit        = "fluent-bit"
 	filebeat         = "filebeat"
 	soldier          = "soldier"
 	telegraf         = "telegraf"
@@ -174,6 +175,15 @@ type SpecDiff struct {
 	currentSpotMonitorServices map[string]*diceyml.Service
 	targetSpotMonitorServices  map[string]*diceyml.Service
 
+	// spec.fluentBit
+	fluentBitGlobalEnvDiff    bool
+	currentFluentBitGlobalEnv map[string]string
+	targetFluentBitGlobalEnv  map[string]string
+
+	fluentBitServiceDiff     bool
+	currentFluentBitServices map[string]*diceyml.Service
+	targetFluentBitServices  map[string]*diceyml.Service
+
 	// spec.fdp
 	fdpGlobalEnvDiff    bool
 	currentFdpGlobalEnv map[string]string
@@ -278,6 +288,8 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 		targetFdpGlobalEnv:             make(map[string]string),
 		currentMeshControllerGlobalEnv: make(map[string]string),
 		targetMeshControllerGlobalEnv:  make(map[string]string),
+		currentFluentBitGlobalEnv:      make(map[string]string),
+		targetFluentBitGlobalEnv:       make(map[string]string),
 
 		currentDiceServices:           make(map[string]*diceyml.Service),
 		targetDiceServices:            make(map[string]*diceyml.Service),
@@ -313,6 +325,8 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 		targetFdpServices:             make(map[string]*diceyml.Service),
 		currentMeshControllerServices: make(map[string]*diceyml.Service),
 		targetMeshControllerServices:  make(map[string]*diceyml.Service),
+		currentFluentBitServices:      make(map[string]*diceyml.Service),
+		targetFluentBitServices:       make(map[string]*diceyml.Service),
 	}
 
 	if current == nil {
@@ -339,6 +353,7 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 	diffSpotMonitor(*diceyml.CopyObj(&current.Spec.SpotMonitor), *diceyml.CopyObj(&target.Spec.SpotMonitor), &r)
 	diffFdp(*diceyml.CopyObj(&current.Spec.Fdp), *diceyml.CopyObj(&target.Spec.Fdp), &r)
 	diffMeshController(*diceyml.CopyObj(&current.Spec.MeshController), *diceyml.CopyObj(&target.Spec.MeshController), &r)
+	diffFluentBit(*diceyml.CopyObj(&current.Spec.FluentBit), *diceyml.CopyObj(&target.Spec.FluentBit), &r)
 	if len(target.Spec.MainPlatform) > 0 {
 		r.filterEdgeClusterServices()
 	}
@@ -351,6 +366,7 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 		fdpAgent,
 		telegrafApp,
 		telegrafAppEdge,
+		fluentbit,
 		filebeat,
 		telegraf,
 		telegrafEdge,
@@ -403,6 +419,8 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 	f(d.targetFdpServices)
 	f(d.currentMeshControllerServices)
 	f(d.targetMeshControllerServices)
+	f(d.currentFluentBitServices)
+	f(d.targetFluentBitServices)
 
 }
 
@@ -545,6 +563,21 @@ func (d *SpecDiff) GetActions() *Actions {
 		mergemap(r.UpdatedServices, differentServices)
 	}
 
+	// spec.fluentBit
+	missingInSet1, missingInSet2, shared = diffServiceset(d.currentFluentBitServices, d.targetFluentBitServices)
+	differentServices = getDifferentServices(d.currentFluentBitServices, d.targetFluentBitServices, shared)
+	expandGlobalEnv(d.targetFluentBitGlobalEnv, missingInSet1)
+	expandGlobalEnv(d.targetFluentBitGlobalEnv, missingInSet2)
+	expandGlobalEnv(d.targetFluentBitGlobalEnv, shared)
+
+	mergemap(r.AddedDaemonSet, missingInSet1)
+	mergemap(r.DeletedDaemonSet, missingInSet2)
+	if d.fluentBitGlobalEnvDiff {
+		mergemap(r.UpdatedDaemonSet, shared)
+	} else {
+		mergemap(r.UpdatedDaemonSet, differentServices)
+	}
+
 	// spec.spotFilebeat (Daemonset)
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotFilebeatServices, d.targetSpotFilebeatServices)
 	differentServices = getDifferentServices(d.currentSpotFilebeatServices, d.targetSpotFilebeatServices, shared)
@@ -583,14 +616,14 @@ func (d *SpecDiff) GetActions() *Actions {
 	expandGlobalEnv(d.targetSpotTelegrafGlobalEnv, shared)
 
 	for name, dicesvc := range missingInSet1 {
-		if name == telegraf || name == telegrafApp || name == telegrafEdge || name == telegrafAppEdge {
+		if name == telegraf || name == telegrafApp || name == telegrafEdge || name == telegrafAppEdge || name == fluentbit {
 			mergemap(r.AddedDaemonSet, map[string]*diceyml.Service{name: dicesvc})
 		} else {
 			mergemap(r.AddedServices, map[string]*diceyml.Service{name: dicesvc})
 		}
 	}
 	for name, dicesvc := range missingInSet2 {
-		if name == telegraf || name == telegrafApp || name == telegrafEdge || name == telegrafAppEdge {
+		if name == telegraf || name == telegrafApp || name == telegrafEdge || name == telegrafAppEdge || name == fluentbit {
 			mergemap(r.DeletedDaemonSet, map[string]*diceyml.Service{name: dicesvc})
 		} else {
 			mergemap(r.DeletedServices, map[string]*diceyml.Service{name: dicesvc})
@@ -601,7 +634,7 @@ func (d *SpecDiff) GetActions() *Actions {
 		updatedSet = shared
 	}
 	for name, dicesvc := range updatedSet {
-		if name == telegraf || name == telegrafApp || name == telegrafEdge || name == telegrafAppEdge {
+		if name == telegraf || name == telegrafApp || name == telegrafEdge || name == telegrafAppEdge || name == fluentbit {
 			mergemap(r.UpdatedDaemonSet, map[string]*diceyml.Service{name: dicesvc})
 		} else {
 			mergemap(r.UpdatedServices, map[string]*diceyml.Service{name: dicesvc})
@@ -720,6 +753,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.spotMonitorGlobalEnvDiff = true
 	specdiff.fdpGlobalEnvDiff = true
 	specdiff.meshControllerGlobalEnvDiff = true
+	specdiff.fluentBitGlobalEnvDiff = true
 
 	dice := diceyml.CopyObj(&target.Spec.Dice)
 	addonplatform := diceyml.CopyObj(&target.Spec.AddonPlatform)
@@ -738,6 +772,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	spotMonitor := diceyml.CopyObj(&target.Spec.SpotMonitor)
 	fdp := diceyml.CopyObj(&target.Spec.Fdp)
 	meshController := diceyml.CopyObj(&target.Spec.MeshController)
+	fluentBit := diceyml.CopyObj(&target.Spec.FluentBit)
 
 	specdiff.targetDiceGlobalEnv = dice.Envs
 	specdiff.targetAddonPlatformGlobalEnv = addonplatform.Envs
@@ -756,6 +791,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.targetSpotMonitorGlobalEnv = spotMonitor.Envs
 	specdiff.targetFdpGlobalEnv = fdp.Envs
 	specdiff.targetMeshControllerGlobalEnv = meshController.Envs
+	specdiff.targetFluentBitGlobalEnv = fluentBit.Envs
 
 	specdiff.diceServiceDiff = true
 	specdiff.addonPlatformServiceDiff = true
@@ -774,6 +810,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.spotMonitorServiceDiff = true
 	specdiff.fdpServiceDiff = true
 	specdiff.meshControllerServiceDiff = true
+	specdiff.fluentBitServiceDiff = true
 
 	specdiff.targetDiceServices = dice.Services
 	specdiff.targetAddonPlatformServices = addonplatform.Services
@@ -792,6 +829,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.targetSpotMonitorServices = spotMonitor.Services
 	specdiff.targetFdpServices = fdp.Services
 	specdiff.targetMeshControllerServices = meshController.Services
+	specdiff.targetFluentBitServices = fluentBit.Services
 
 }
 
@@ -871,6 +909,11 @@ func diffFdp(current, target diceyml.Object, specdiff *SpecDiff) {
 func diffMeshController(current, target diceyml.Object, specdiff *SpecDiff) {
 	diffMeshControllerGlobalEnv(current.Envs, target.Envs, specdiff)
 	diffMeshControllerServices(current.Services, target.Services, specdiff)
+}
+
+func diffFluentBit(current, target diceyml.Object, specdiff *SpecDiff) {
+	diffFluentBitGlobalEnv(current.Envs, target.Envs, specdiff)
+	diffFluentBitServices(current.Services, target.Services, specdiff)
 }
 
 func diffDiceGlobalEnv(current, target map[string]string, specdiff *SpecDiff) {
@@ -961,6 +1004,12 @@ func diffMeshControllerGlobalEnv(current, target map[string]string, specdiff *Sp
 	auxDiffGlobalEnv(current, target,
 		&specdiff.currentMeshControllerGlobalEnv, &specdiff.targetMeshControllerGlobalEnv,
 		&specdiff.meshControllerGlobalEnvDiff)
+}
+
+func diffFluentBitGlobalEnv(current, target map[string]string, specdiff *SpecDiff) {
+	auxDiffGlobalEnv(current, target,
+		&specdiff.currentFluentBitGlobalEnv, &specdiff.currentFluentBitGlobalEnv,
+		&specdiff.fluentBitGlobalEnvDiff)
 }
 
 func auxDiffGlobalEnv(current, target map[string]string, specCurrent, specTarget *map[string]string, diff *bool) {
@@ -1069,6 +1118,12 @@ func diffMeshControllerServices(current, target map[string]*diceyml.Service, spe
 	auxDiffServices(current, target,
 		&specdiff.currentMeshControllerServices, &specdiff.targetMeshControllerServices,
 		&specdiff.meshControllerServiceDiff)
+}
+
+func diffFluentBitServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
+	auxDiffServices(current, target,
+		&specdiff.currentFluentBitServices, &specdiff.targetFluentBitServices,
+		&specdiff.fluentBitServiceDiff)
 }
 
 func auxDiffServices(current, target map[string]*diceyml.Service, specCurrent, specTarget *map[string]*diceyml.Service, diff *bool) {
