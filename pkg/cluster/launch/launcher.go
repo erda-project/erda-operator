@@ -377,7 +377,7 @@ func (l *Launcher) launchUpdatedDS(c chan result, svcName string, diceSvc *dicey
 }
 
 func (l *Launcher) launchDeletedDS(c chan result, svcName string, diceSvc *diceyml.Service) {
-	if err := daemonset.Delete(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
+	if err := daemonset.Delete(l.client, svcName, l.targetspec); err != nil {
 		msg := fmt.Sprintf("Failed to delete daemonset: dicesvc: %s, err: %v", svcName, err)
 		c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 		return

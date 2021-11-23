@@ -95,6 +95,7 @@ type ClusterSpec struct {
 	SpotStatus     diceyml.Object `json:"spotStatus"`
 	SpotTelegraf   diceyml.Object `json:"spotTelegraf"`
 	Tmc            diceyml.Object `json:"tmc"`
+	FluentBit      diceyml.Object `json:"fluentBit"`
 	Hepa           diceyml.Object `json:"hepa"`
 	SpotMonitor    diceyml.Object `json:"spotMonitor"`
 	Fdp            diceyml.Object `json:"fdp"`

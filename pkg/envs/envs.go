@@ -42,6 +42,7 @@ func GetAllServices(cluster *spec.DiceCluster) []diceyml.Services {
 		cluster.Spec.SpotCollector.Services,
 		cluster.Spec.SpotDashboard.Services,
 		cluster.Spec.SpotFilebeat.Services,
+		cluster.Spec.FluentBit.Services,
 		cluster.Spec.SpotStatus.Services,
 		cluster.Spec.SpotTelegraf.Services,
 		cluster.Spec.Tmc.Services,
