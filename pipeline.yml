@@ -1,0 +1,35 @@
+version: "1.1"
+
+stages:
+  - stage:
+      - git-checkout:
+          alias: erda-operator
+          params:
+            uri: https://github.com/erda-project/erda-operator.git
+            username: ${{ configs.github_actor }}
+            password: ${{ configs.github_token }}
+            branch: master
+            depth: 1
+  - stage:
+      - custom-script:
+          alias: build-erda-operator
+          commands:
+            - cd ${erda-operator}
+            - docker login ${{ configs.docker_registry }} -u ${{ configs.docker_registry_username }} -p ${{ configs.docker_registry_password }}
+            - make push
+          resources:
+            cpu: 2
+            mem: 2048
+  - stage:
+      - custom-script:
+          alias: retag-erda-operator-image
+          version: "1.0"
+          commands:
+            - cd ${erda-operator}
+            - docker pull ${{ outputs.build-erda-operator.image }}
+            - docker login ${{ configs.docker_registry }} -u ${{ configs.docker_registry_username }} -p ${{ configs.docker_registry_password }}
+            - docker tag ${{ outputs.build-erda-operator.image }} ${{ configs.docker_registry }}/dice-operator:`cat VERSION`
+            - docker push ${{ configs.docker_registry }}/dice-operator:`cat VERSION`
+          resources:
+            cpu: 2
+            mem: 2048
