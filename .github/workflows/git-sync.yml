@@ -1,0 +1,29 @@
+# Copyright (c) 2021 Terminus, Inc.
+#
+# This program is free software: you can use, redistribute, and/or modify
+# it under the terms of the GNU Affero General Public License, version 3
+# or later ("AGPL"), as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+name: GIT SYNC
+
+on: [push, delete]
+
+jobs:
+  build:
+    if: github.repository == 'erda-project/erda-operator'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: unshallow
+        run: git fetch --unshallow origin
+      - name: add remote
+        run: git remote add mirror https://${{ secrets.GIT_MIRROR_USERNAME }}:${{ secrets.GIT_MIRROR_PASSWORD }}@erda.cloud/erda/dop/erda-project/erda-operator
+      - name: push
+        run: git push --tags --force --prune mirror "refs/remotes/origin/*:refs/heads/*"
