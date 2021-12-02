@@ -1,22 +1,30 @@
 version: "1.1"
 
+on:
+  push:
+    branches:
+      - master
+      - release/*
+    tags:
+      - v*
+
 stages:
   - stage:
       - git-checkout:
           alias: erda-operator
           params:
-            uri: https://github.com/erda-project/erda-operator.git
-            username: ${{ configs.github_actor }}
-            password: ${{ configs.github_token }}
-            branch: master
             depth: 1
+  - stage:
+      - extract-repo-version:
+          params:
+            git_dir: ${{ dirs.erda-operator }}
   - stage:
       - custom-script:
           alias: build-erda-operator
           commands:
-            - cd ${erda-operator}
+            - cd ${{ dirs.erda-operator }}
             - docker login ${{ configs.docker_registry }} -u ${{ configs.docker_registry_username }} -p ${{ configs.docker_registry_password }}
-            - make push
+            - GO_PROXY_ENV=https://goproxy.cn/ REGISTRY_HOST=${{ configs.docker_registry }} IMAGE_TAG=${{ outputs.extract-repo-version.image_tag }} make push
           resources:
             cpu: 2
             mem: 2048
@@ -28,8 +36,10 @@ stages:
             - cd ${erda-operator}
             - docker pull ${{ outputs.build-erda-operator.image }}
             - docker login ${{ configs.docker_registry }} -u ${{ configs.docker_registry_username }} -p ${{ configs.docker_registry_password }}
-            - docker tag ${{ outputs.build-erda-operator.image }} ${{ configs.docker_registry }}/dice-operator:`cat VERSION`
-            - docker push ${{ configs.docker_registry }}/dice-operator:`cat VERSION`
+            - export new_image=${{ configs.docker_registry }}/dice-operator:${{ outputs.extract-repo-version.version }}
+            - docker tag ${{ outputs.build-erda-operator.image }} $new_image
+            - docker push $new_image
+            - echo "action meta:image=$new_image"
           resources:
             cpu: 2
             mem: 2048

@@ -31,7 +31,7 @@ IMAGE_PREFIX ?= $(strip )
 IMAGE_SUFFIX ?= $(strip )
 
 IMAGE_TAG ?= "$(shell cat VERSION)-$(shell date -u +%Y%m%d)-$(shell git rev-parse --short HEAD --dirty)"
-DOCKER_LABELS ?= git-describe="$(shell cat VERSION)-$(shell date -u +%Y%m%d)-$(shell git rev-parse --short HEAD --dirty)"
+DOCKER_LABELS ?= git-describe="$(IMAGE_TAG)"
 
 GO_OPTIONS ?= -mod=vendor -count=1
 SHELLOPTS := errexit
