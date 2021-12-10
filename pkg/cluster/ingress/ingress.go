@@ -16,7 +16,10 @@ package ingress
 import (
 	"context"
 	"fmt"
+	"os"
 
+	"github.com/erda-project/erda/pkg/parser/diceyml"
+	"github.com/erda-project/erda/pkg/strutil"
 	extensions "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,8 +27,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/erda-project/dice-operator/pkg/spec"
-	"github.com/erda-project/erda/pkg/parser/diceyml"
-	"github.com/erda-project/erda/pkg/strutil"
+)
+
+const (
+	EnableComponentAccessLog = "ENABLE_COMPONENT_ACCESS_LOG"
 )
 
 func HasIngress(dicesvc *diceyml.Service) bool {
@@ -163,9 +168,14 @@ func convertHost(dicesvcname string, clus *spec.DiceCluster) []string {
 }
 
 func annotations(dicesvcname string) map[string]string {
+	enableAccessLog := "false"
+
+	if os.Getenv(EnableComponentAccessLog) == "true" {
+		enableAccessLog = "true"
+	}
 
 	annotation := map[string]string{
-		"nginx.ingress.kubernetes.io/enable-access-log": "false",
+		"nginx.ingress.kubernetes.io/enable-access-log": enableAccessLog,
 	}
 
 	switch dicesvcname {
