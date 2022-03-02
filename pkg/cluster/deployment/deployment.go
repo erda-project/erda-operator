@@ -193,7 +193,7 @@ func BuildDeployment(
 							Env:             Envs(dicesvcname, dicesvc, clus),
 							EnvFrom:         EnvsFrom(clus),
 							Image:           dicesvc.Image,
-							ImagePullPolicy: corev1.PullAlways,
+							ImagePullPolicy: corev1.PullIfNotPresent,
 							LivenessProbe:   &livenessprobe,
 							ReadinessProbe:  &readinessprobe,
 							Ports:           Ports(dicesvc),

@@ -94,7 +94,7 @@ func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster, ownerRefs []metav1
 							Name:            name,
 							Env:             composeEnvFromDiceJob(j),
 							Image:           j.Image,
-							ImagePullPolicy: corev1.PullAlways,
+							ImagePullPolicy: corev1.PullIfNotPresent,
 							Command: map[bool][]string{
 								true:  {"/bin/sh", "-c", j.Cmd},
 								false: nil}[j.Cmd != ""],
