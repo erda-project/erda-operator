@@ -158,7 +158,7 @@ func BuildDaemonSet(
 						EnvFrom:         deployment.EnvsFrom(clus),
 						Env:             deployment.Envs(dicesvcname, dicesvc, clus),
 						Image:           dicesvc.Image,
-						ImagePullPolicy: "Always",
+						ImagePullPolicy: "IfNotPresent",
 						LivenessProbe:   &livenessProbe,
 						ReadinessProbe:  &readinessProbe,
 						Ports:           deployment.Ports(dicesvc),
