@@ -250,7 +250,7 @@ func BuildDeployment(
 
 	// TODO: erda.yaml support mount configmap/secret to directory
 	// telegraf, filebeat also need. pkg/cluster/daemonset/daemonset.go
-	if strings.Contains(dicesvcname, "filebeat") || strings.Contains(dicesvcname, "telegraf") {
+	if strings.Contains(dicesvcname, "telegraf") {
 		deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: ErdaClusterCredential,
 			VolumeSource: corev1.VolumeSource{
