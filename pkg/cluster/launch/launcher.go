@@ -47,6 +47,8 @@ const (
 	UpdateService   = "update Service"
 	DeleteService   = "delete Service"
 	AddService      = "add Service"
+
+	collector = "collector"
 )
 
 type Launcher struct {
@@ -232,7 +234,7 @@ func (l *Launcher) launchAddedService(c chan result, svcName string, diceSvc *di
 		return
 	}
 
-	if ingress.HasIngress(diceSvc) {
+	if ingress.HasIngress(diceSvc) && !(l.isEdge() && svcName == collector) {
 		if _, err := ingress.CreateIfNotExists(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
 			msg := fmt.Sprintf("Failed to deploy ingress: dicesvc: %s, err: %v", svcName, err)
 			c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
@@ -272,7 +274,7 @@ func (l *Launcher) launchUpdatedService(c chan result, svcName string, diceSvc *
 		return
 	}
 
-	if ingress.HasIngress(diceSvc) {
+	if ingress.HasIngress(diceSvc) && !(l.isEdge() && svcName == collector) {
 		if _, err := ingress.CreateOrUpdate(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
 			msg := fmt.Sprintf("Failed to update ingress: dicesvc: %s, err: %v", svcName, err)
 			c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
@@ -385,4 +387,8 @@ func (l *Launcher) launchDeletedDS(c chan result, svcName string, diceSvc *dicey
 
 	msg := fmt.Sprintf("check %s done", svcName)
 	c <- result{svcName, msg, true, ""}
+}
+
+func (l *Launcher) isEdge() bool {
+	return len(l.targetspec.Spec.MainPlatform) != 0
 }
