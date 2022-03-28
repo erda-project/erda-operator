@@ -38,9 +38,9 @@ type ErdaReconciler struct {
 type options struct {
 }
 
-//+kubebuilder:rbac:groups=erda.terminus.io,resources=erdas,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=erda.terminus.io,resources=erdas/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=erda.terminus.io,resources=erdas/finalizers,verbs=update
+//+kubebuilder:rbac:groups=erda.erda.cloud,resources=erdas,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=erda.erda.cloud,resources=erdas/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=erda.erda.cloud,resources=erdas/finalizers,verbs=update
 func (r *ErdaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// TODO: log
 	log := r.Log.WithValues("erda-operator", req.NamespacedName)
