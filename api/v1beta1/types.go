@@ -44,9 +44,9 @@ const (
 )
 
 const (
-	ErdaJobTypeLabel  = "erda.io/job-type"
-	ErdaOperatorLabel = "erda.io/erda-operator"
-	ErdaOperatorApp   = "erda.io/erda-operator-app"
+	ErdaJobTypeLabel   = "erda/job-type"
+	ErdaComponentLabel = "app.erda.cloud/component"
+	ErdaOperatorLabel  = "app.erda.cloud/operator"
 )
 
 //+kubebuilder:object:root=true
@@ -91,7 +91,7 @@ type ErdaSpec struct {
 // ErdaStatus defines the observed state of Erda
 type ErdaStatus struct {
 	Phase        PhaseType           `yaml:"phase,omitempty" json:"phase,omitempty"`
-	Applications []ApplicationStatus `yaml:"applications,omitempty"json:"applications,omitempty"`
+	Applications []ApplicationStatus `yaml:"applications,omitempty" json:"applications,omitempty"`
 	//PreJobStatus      map[string]Status        `json:"preJobStatus,omitempty"`
 	//PostJobStatus     map[string]Status        `json:"postJobStatus,omitempty"`
 }

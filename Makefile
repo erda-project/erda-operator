@@ -1,6 +1,7 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+REGISTRY ?= registry.erda.cloud/erda
+IMG ?= ${REGISTRY}/erda-operator:$(shell date '+%Y%m%d')-$(shell git rev-parse --short HEAD)
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
@@ -68,6 +69,8 @@ docker-build: test ## Build docker image with the manager.
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
+
+docker-build-push: docker-build docker-push
 
 ##@ Deployment
 

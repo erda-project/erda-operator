@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
+	"strconv"
 )
 
 // ConvertInt32ToPointInt32 convert int32 to int32 pointer
@@ -35,19 +36,14 @@ func ConvertDeletePropagationToPoint(propagation metav1.DeletionPropagation) *me
 	return &propagation
 }
 
-const (
-	PlatformDomainKey string = "PLATFORM_DOMAIN"
-)
-
 func ComposeObjectMetadataFromComponent(component *erdav1beta1.Component, references []metav1.OwnerReference) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:      component.Name,
 		Namespace: component.Namespace,
 		Labels: AppendLabels(component.Labels, map[string]string{
-			erdav1beta1.ErdaOperatorLabel: "true",
-			erdav1beta1.ErdaOperatorApp:   component.Name,
+			erdav1beta1.ErdaOperatorLabel:  "true",
+			erdav1beta1.ErdaComponentLabel: component.Name,
 		}),
-		Annotations:     component.Annotations,
 		OwnerReferences: references,
 	}
 }
@@ -120,16 +116,11 @@ func MergeEnvs(originEnvs []corev1.EnvVar, destEnvs []corev1.EnvVar) []corev1.En
 }
 
 func ComposeResourceToEnvs(component erdav1beta1.Component) []corev1.EnvVar {
-	envs := []corev1.EnvVar{}
-	envs = append(envs, []corev1.EnvVar{
-		{
-			Name:  "DICE_CPU_ORIGIN",
-			Value: fmt.Sprintf("%f", component.Resources.Limits.Cpu().AsApproximateFloat64()),
-		},
-		{
-			Name:  "DICE_MEM_ORIGIN",
-			Value: fmt.Sprintf("%d", component.Resources.Limits.Memory().Value()/1024/1024),
-		},
+	maxCpu := MaxFloat64(component.Resources.Requests.Cpu().AsApproximateFloat64(),
+		component.Resources.Limits.Cpu().AsApproximateFloat64())
+	maxMem := MaxInt64(component.Resources.Requests.Memory().Value()/1024/1024,
+		component.Resources.Limits.Memory().Value()/1024/1024)
+	return []corev1.EnvVar{
 		{
 			Name:  "DICE_CPU_REQUEST",
 			Value: fmt.Sprintf("%f", component.Resources.Requests.Cpu().AsApproximateFloat64()),
@@ -139,19 +130,26 @@ func ComposeResourceToEnvs(component erdav1beta1.Component) []corev1.EnvVar {
 			Value: fmt.Sprintf("%d", component.Resources.Requests.Memory().Value()/1024/1024),
 		},
 		{
+			Name:  "DICE_CPU_ORIGIN",
+			Value: fmt.Sprintf("%f", maxCpu),
+		},
+		{
+			Name:  "DICE_MEM_ORIGIN",
+			Value: fmt.Sprintf("%d", maxMem),
+		},
+		{
 			Name:  "DICE_CPU_LIMIT",
-			Value: fmt.Sprintf("%f", component.Resources.Limits.Cpu().AsApproximateFloat64()),
+			Value: fmt.Sprintf("%f", maxCpu),
 		},
 		{
 			Name:  "DICE_MEM_LIMIT",
-			Value: fmt.Sprintf("%d", component.Resources.Limits.Memory().Value()/1024/1024),
+			Value: fmt.Sprintf("%d", maxMem),
 		},
-	}...)
-	return envs
+	}
 }
 
 func ComposeDependEnvs(erda erdav1beta1.Erda) []corev1.EnvVar {
-	envs := []corev1.EnvVar{}
+	envs := make([]corev1.EnvVar, 0)
 	for _, app := range erda.Spec.Applications {
 		for _, component := range app.Components {
 			if component.WorkLoad == erdav1beta1.PerNode ||
@@ -160,23 +158,25 @@ func ComposeDependEnvs(erda erdav1beta1.Erda) []corev1.EnvVar {
 			}
 			if len(component.Network.ServiceDiscovery) > 0 {
 				sd := component.Network.ServiceDiscovery[0]
+				convertedCompName := strings.ToUpper(strings.ReplaceAll(component.Name, "-", "_"))
 				envs = append(envs, corev1.EnvVar{
-					Name:      fmt.Sprintf("%s_ADDR", strings.ToUpper(strings.ReplaceAll(component.Name, "-", "_"))),
-					Value:     fmt.Sprintf("%s.%s.svc.cluster.local:%d", component.Name, erda.Namespace, sd.Port),
-					ValueFrom: nil,
+					Name: fmt.Sprintf("%s_ADDR", convertedCompName),
+					// TODO: Kubernetes service name, svc.cluster.local is default
+					Value: fmt.Sprintf("%s.%s.svc.cluster.local:%d", component.Name, erda.Namespace, sd.Port),
 				})
-				if sd.Domain != "" {
-					envs = append(envs, []corev1.EnvVar{
-						{
-							Name:  fmt.Sprintf("%s_PUBLIC_URL", strings.ToUpper(component.Name)),
-							Value: fmt.Sprintf("%s://%s", app.Annotations["DICE_PROTOCOL"], sd.Domain),
-						},
-						{
-							Name:  fmt.Sprintf("%s_PUBLIC_ADDR", strings.ToUpper(component.Name)),
-							Value: sd.Domain,
-						},
-					}...)
+				if sd.Domain == "" {
+					continue
 				}
+				envs = append(envs, []corev1.EnvVar{
+					{
+						Name:  fmt.Sprintf("%s_PUBLIC_URL", convertedCompName),
+						Value: fmt.Sprintf("%s://%s", ParseProtocol(app.Annotations[erdav1beta1.AnnotationSSLEnabled]), sd.Domain),
+					},
+					{
+						Name:  fmt.Sprintf("%s_PUBLIC_ADDR", convertedCompName),
+						Value: sd.Domain,
+					},
+				}...)
 			}
 		}
 	}
@@ -184,9 +184,10 @@ func ComposeDependEnvs(erda erdav1beta1.Erda) []corev1.EnvVar {
 }
 
 func ComposeSelfADDREnv(component erdav1beta1.Component, protocol string) []corev1.EnvVar {
-	envs := []corev1.EnvVar{}
+	envs := make([]corev1.EnvVar, 0)
 	envs = append(envs, corev1.EnvVar{
-		Name:  "SELF_ADDR",
+		Name: "SELF_ADDR",
+		// TODO: kubernetes services
 		Value: fmt.Sprintf("%s.%s.svc.cluster.local:%d", component.Name, component.Namespace, component.Network.ServiceDiscovery[0].Port),
 	})
 	if component.Network.ServiceDiscovery[0].Domain != "" {
@@ -220,4 +221,12 @@ func ReplaceDependsEnv(dependEnvs []corev1.EnvVar, envs []corev1.EnvVar) []corev
 		}
 	}
 	return envs
+}
+
+func ParseProtocol(source string) string {
+	ssl, _ := strconv.ParseBool(source)
+	if ssl {
+		return "https"
+	}
+	return "http"
 }

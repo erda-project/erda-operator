@@ -53,6 +53,13 @@ const (
 	ConfigurationConfigMap = "ConfigMap"
 )
 
+const (
+	AnnotationSSLEnabled          = "erda.erda.cloud/ssl-enabled"
+	AnnotationIngressAnnotation   = "erda.erda.cloud/ingress-annotation"
+	AnnotationComponentSA         = "erda.erda.cloud/component-service-account"
+	AnnotationComponentPrivileged = "erda.erda.cloud/component-security-context-privileged"
+)
+
 type Component struct {
 	Metadata      `yaml:",inline" json:",inline"`
 	ComponentSpec `yaml:",inline" json:",inline"`
@@ -69,10 +76,12 @@ type ComponentSpec struct {
 	Command        []string                    `yaml:"command,omitempty" json:"command,omitempty"`
 	Storage        Storage                     `yaml:"storage,omitempty" json:"storage,omitempty"`
 	Hosts          []string                    `yaml:"hosts,omitempty" json:"hosts,omitempty"`
-	DependsOn      []string                    `yaml:"dependsOn,omitempty" json:"dependsOn,omitempty"`
 	Network        *Network                    `yaml:"network,omitempty" json:"network,omitempty"`
 	HealthCheck    *HealthCheck                `yaml:"healthCheck,omitempty" json:"healthCheck,omitempty"`
 	Configurations []Configuration             `yaml:"configurations,omitempty" json:"configurations,omitempty"`
+
+	// TODO: impl
+	DependsOn []string `yaml:"dependsOn,omitempty" json:"dependsOn,omitempty"`
 }
 
 type HealthCheck struct {
@@ -100,7 +109,7 @@ type Configuration struct {
 
 type Affinity struct {
 	Key   string       `yaml:"key" json:"key"`
-	Value string       `yaml:"value" json:"value"`
+	Value string       `yaml:"value,omitempty" json:"value,omitempty"`
 	Exist bool         `yaml:"exist" json:"exist"`
 	Type  AffinityType `yaml:"type" json:"type"`
 }

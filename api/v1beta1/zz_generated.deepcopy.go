@@ -201,11 +201,6 @@ func (in *ComponentSpec) DeepCopyInto(out *ComponentSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.DependsOn != nil {
-		in, out := &in.DependsOn, &out.DependsOn
-		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
 	if in.Network != nil {
 		in, out := &in.Network, &out.Network
 		*out = new(Network)
@@ -222,6 +217,11 @@ func (in *ComponentSpec) DeepCopyInto(out *ComponentSpec) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.DependsOn != nil {
+		in, out := &in.DependsOn, &out.DependsOn
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 }
 

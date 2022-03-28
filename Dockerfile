@@ -1,27 +1,41 @@
-# Build the manager binary
-FROM golang:1.16 as builder
+# Builder base image
+FROM registry.erda.cloud/retag/golang:1.16-alpine3.14 as builder
 
 WORKDIR /workspace
-# Copy the Go Modules manifests
+# Args
+ARG GOPROXY
+ARG ARCH
+
+# Envoriment
+ENV GO111MODULE=on \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=${ARCH:-amd64} \
+    GOPROXY=${GOPROXY:-https://goproxy.cn}
+
+# Copy modules mainfest
 COPY go.mod go.mod
 COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
+
+# Cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
 
-# Copy the go source
-COPY main.go main.go
+# Copy the soruce
+COPY cmd/ cmd/
 COPY api/ api/
-COPY controllers/ controllers/
+COPY pkg/ pkg/
+COPY pkg/controllers/ controllers/
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+# Build the binary
+RUN go build -a -o manager cmd/manager/main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE:-registry.erda.cloud/retag/distroless-static:nonroot}
+
 WORKDIR /
+
 COPY --from=builder /workspace/manager .
 USER 65532:65532
 
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["./manager"]
