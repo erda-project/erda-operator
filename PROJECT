@@ -1,0 +1,16 @@
+domain: github.com
+layout:
+- go.kubebuilder.io/v3
+projectName: erda-operator
+repo: github.com/erda-project/erda-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: github.com
+  group: erda.erda.cloud
+  kind: Erda
+  path: github.com/erda-project/erda-operator/api/v1beta1
+  version: v1beta1
+version: "3"
