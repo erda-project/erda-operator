@@ -5,7 +5,7 @@ metadata:
   name: erda-editor-role
 rules:
 - apiGroups:
-  - erda.erda.cloud
+  - core.erda.cloud
   resources:
   - erdas
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - erda.erda.cloud
+  - core.erda.cloud
   resources:
   - erdas/status
   verbs:

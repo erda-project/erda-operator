@@ -24,6 +24,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v4/apis/volumesnapshot/v1"
 	"go.uber.org/zap/zapcore"
+	uberzap "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -73,6 +74,9 @@ func main() {
 	opts := zap.Options{
 		Development:     debug,
 		StacktraceLevel: zapcore.DPanicLevel,
+		ZapOpts: []uberzap.Option{
+			uberzap.WithCaller(true),
+		},
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()

@@ -54,10 +54,11 @@ const (
 )
 
 const (
-	AnnotationSSLEnabled          = "erda.erda.cloud/ssl-enabled"
-	AnnotationIngressAnnotation   = "erda.erda.cloud/ingress-annotation"
-	AnnotationComponentSA         = "erda.erda.cloud/component-service-account"
-	AnnotationComponentPrivileged = "erda.erda.cloud/component-security-context-privileged"
+	AnnotationSSLEnabled           = "erda.erda.cloud/ssl-enabled"
+	AnnotationIngressAnnotation    = "erda.erda.cloud/ingress-annotations"
+	AnnotationComponentSA          = "erda.erda.cloud/component-service-account"
+	AnnotationComponentPrivileged  = "erda.erda.cloud/component-security-context-privileged"
+	AnnotationComponentAnnotations = "erda.erda.cloud/component-annotations"
 )
 
 type Component struct {
@@ -66,6 +67,7 @@ type Component struct {
 }
 
 type ComponentSpec struct {
+	//+kubebuilder:validation:Enum={Stateless,Stateful,PerNode}
 	WorkLoad       WorkLoadType                `yaml:"workload" json:"workload"`
 	ImageInfo      ImageInfo                   `yaml:"imageInfo" json:"imageInfo"`
 	Replicas       *int32                      `yaml:"replicas" json:"replicas"`

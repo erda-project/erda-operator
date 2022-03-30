@@ -14,7 +14,7 @@ Erda-Operator is a Kubernetes operator developed by [Erda Team](https://github.c
 
   ```yaml
   # an nginx sample
-  apiVersion: erda.erda.cloud/v1beta1
+  apiVersion: core.erda.cloud/v1beta1
   kind: Erda
   metadata:
     name: sample-test

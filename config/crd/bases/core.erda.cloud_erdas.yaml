@@ -426,6 +426,10 @@ spec:
                                 type: array
                             type: object
                           workload:
+                            enum:
+                            - Stateless
+                            - Stateful
+                            - PerNode
                             type: string
                         required:
                         - imageInfo
@@ -788,6 +792,9 @@ spec:
                             https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
                           type: object
                       type: object
+                    retries:
+                      format: int32
+                      type: integer
                     storage:
                       properties:
                         volumes:
@@ -820,6 +827,8 @@ spec:
                           type: array
                       type: object
                     type:
+                      enum:
+                      - PreJob
                       type: string
                   required:
                   - imageInfo
@@ -858,12 +867,12 @@ spec:
                   - status
                   type: object
                 type: array
-              phase:
-                type: string
-              preJobStatus:
+              jobs:
                 additionalProperties:
                   type: string
                 type: object
+              phase:
+                type: string
             type: object
         type: object
     served: true

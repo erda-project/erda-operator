@@ -126,7 +126,7 @@ func ComposeAffinityByJob(job *erdav1beta1.Job) *corev1.Affinity {
 		},
 	}
 
-	affinity.NodeAffinity = composeNodeAffinity(job.Spec.Affinity, affinity.NodeAffinity)
+	affinity.NodeAffinity = composeNodeAffinity(job.Affinity, affinity.NodeAffinity)
 	return affinity
 }
 

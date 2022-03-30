@@ -15,9 +15,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: erdas.erda.erda.cloud
+  name: erdas.core.erda.cloud
 spec:
-  group: erda.erda.cloud
+  group: core.erda.cloud
   names:
     kind: Erda
     listKind: ErdaList

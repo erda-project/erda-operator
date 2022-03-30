@@ -22,9 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
-	"github.com/erda-project/erda-operator/pkg/utils"
+)
+
+var (
+	requeueTime = 5 * time.Second
 )
 
 // ErdaReconciler reconciles a Erda object
@@ -38,9 +42,9 @@ type ErdaReconciler struct {
 type options struct {
 }
 
-//+kubebuilder:rbac:groups=erda.erda.cloud,resources=erdas,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=erda.erda.cloud,resources=erdas/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=erda.erda.cloud,resources=erdas/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core.erda.cloud,resources=erdas,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core.erda.cloud,resources=erdas/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=core.erda.cloud,resources=erdas/finalizers,verbs=update
 func (r *ErdaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// TODO: log
 	log := r.Log.WithValues("erda-operator", req.NamespacedName)
@@ -54,81 +58,35 @@ func (r *ErdaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-
 	references := erda.ComposeOwnerReferences()
 
-	// TODO: There are two questions about pre-job tasks and post-job tasks:
-	// TODO: 1. How to deal with the job task when it is failed? delete and recreate it?
-	// TODO: 2. How to deal with the job task when it is completed and the user updates the DICE YAML
-
-	//if len(erda.Spec.PreJobs) > 0 {
-	//	erda.Status.Condition = erdav1beta1.ConditionPreJobs
-	//
-	//	erda.Status.PreJobStatus = r.ReconcileJob(erda, erdav1beta1.PreJobType)
-	//	if err := r.Status().Update(ctx, &erda); err != nil {
-	//		return ctrl.Result{Requeue: true}, err
-	//	}
-	//}
-
-	dependEnvs := utils.ComposeDependEnvs(erda)
-
-	for _, app := range erda.Spec.Applications {
-		for _, component := range app.Components {
-			// set component.Namespace value from Erda.Namespace
-			component.Namespace = erda.Namespace
-
-			err := r.SyncPersistentVolumeClaim(component)
-			if client.IgnoreNotFound(err) != nil {
-				log.Error(err, "sync pvc error")
-				return ctrl.Result{Requeue: true}, err
+	if len(erda.Spec.Jobs) > 0 {
+		if err := r.ReconcileJob(ctx, &erda, references); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
 			}
-
-			// filter the existed secrets when be used in components
-			r.SyncConfigurations(&component)
-
-			if len(component.Network.ServiceDiscovery) > 0 {
-				component.Envs = append(component.Envs, utils.ComposeSelfADDREnv(component,
-					utils.ParseProtocol(app.Annotations[erdav1beta1.AnnotationSSLEnabled]))...)
-			}
-			component.Envs = append(component.Envs, utils.ComposeResourceToEnvs(component)...)
-			component.Envs = utils.MergeEnvs(app.Envs, component.Envs)
-			component.Envs = utils.ReplaceDependsEnv(dependEnvs, component.Envs)
-			component.Envs = utils.ReplaceEnvironments(component.Envs)
-
-			if component.EnvFrom != nil && app.EnvFrom != nil {
-				component.EnvFrom = append(app.EnvFrom, component.EnvFrom...)
-			} else {
-				component.EnvFrom = app.EnvFrom
-			}
-
-			err, _ = r.ReconcileWorkload(ctx, component, references)
-			if err != nil {
-				return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
-			}
+			return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
+		}
+		switch erda.Status.Phase {
+		case erdav1beta1.PhaseInitialization:
+			return ctrl.Result{Requeue: true, RequeueAfter: requeueTime}, nil
+		case erdav1beta1.PhaseFailed:
+			return ctrl.Result{}, nil
 		}
 	}
 
-	if err := r.SyncWorkLoadStatus(ctx, &erda); err != nil {
+	if err := r.ReconcileApplication(ctx, &erda, references); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
 	}
 
 	if erda.Status.Phase != erdav1beta1.PhaseReady {
-		return ctrl.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: requeueTime}, nil
 	}
 
 	return ctrl.Result{}, nil
-
-	// TODO: There are two questions about pre-job tasks and post-job tasks:
-	// TODO: 1. How to deal with the job task when it is failed? delete and recreate it?
-	// TODO: 2. How to deal with the job task when it is completed and the user updates the DICE YAML
-
-	//if len(erda.Spec.PostJobs) > 0 {
-	//	erda.Status.Condition = erdav1beta1.ConditionPostJobs
-	//	erda.Status.PostJobStatus = r.ReconcileJob(erda, erdav1beta1.PostJobType)
-	//	if err := r.Status().Update(ctx, &erda); err != nil {
-	//		return ctrl.Result{Requeue: true}, err
-	//	}
-	//}
 }
 
 // SetupWithManager sets up the controller with the Manager.

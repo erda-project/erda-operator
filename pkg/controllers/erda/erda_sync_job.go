@@ -14,90 +14,137 @@
 
 package erda
 
-//
-//import (
-//	"context"
-//	"fmt"
-//	"strings"
-//
-//	batchv1 "k8s.io/api/batch/v1"
-//	"k8s.io/apimachinery/pkg/types"
-//	"sigs.k8s.io/controller-runtime/pkg/client"
-//
-//	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
-//	"github.com/erda-project/erda-operator/pkg"
-//	"github.com/erda-project/erda-operator/pkg/utils"
-//)
-//
-//func (r *ErdaReconciler) ReconcileJob(erda erdav1beta1.Erda, jobType string) map[string]erdav1beta1.Status {
-//
-//	erdaJobs := erda.Spec.PreJobs
-//	result := erda.Status.PreJobStatus
-//
-//	if jobType == erdav1beta1.PostJobType {
-//		erdaJobs = erda.Spec.PostJobs
-//		result = erda.Status.PostJobStatus
-//	}
-//
-//	if result == nil {
-//		result = map[string]erdav1beta1.Status{}
-//	}
-//
-//	// list all kubernetes jobs via labels
-//	k8sJobs := batchv1.JobList{}
-//	if err := r.List(context.Background(), &k8sJobs, client.InNamespace(erda.Namespace),
-//		client.MatchingLabels{
-//			erdav1beta1.ErdaOperatorLabel: erda.Name,
-//			erdav1beta1.ErdaJobTypeLabel:  strings.ToLower(erdav1beta1.PreJobType),
-//		}); err != nil {
-//		r.Log.Error(err, fmt.Sprintf("list %v job err", strings.ToLower(jobType)))
-//		return result
-//	}
-//
-//	// create and check job status in order
-//	for index, job := range erdaJobs {
-//		// set the name and namespace of ErdaJob, those only can be set by the controller
-//		job.Name = fmt.Sprintf("%s-%s-%d", erda.Name, strings.ToLower(jobType), index)
-//		job.Namespace = erda.Namespace
-//		namespacedName := types.NamespacedName{Name: job.Name, Namespace: job.Namespace}
-//
-//		// check kubernetes job status if it is existed
-//		isJobExist := false
-//		for _, k8sJob := range k8sJobs.Items {
-//			if k8sJob.Name == job.Name {
-//				condition := pkg.IsJobFinished(k8sJob)
-//				switch condition.Type {
-//				case batchv1.JobComplete:
-//					result[job.Name] = erdav1beta1.Status{Status: erdav1beta1.ComponentStatusCompleted, Message: ""}
-//				case batchv1.JobFailed:
-//					result[job.Name] = erdav1beta1.Status{Status: erdav1beta1.ComponentStatusFailed, Message: condition.Message}
-//					return result
-//				case "":
-//					result[job.Name] = erdav1beta1.Status{Status: erdav1beta1.ComponentStatusRunning}
-//					return result
-//				}
-//				isJobExist = true
-//				break
-//			}
-//		}
-//
-//		// create the kubernetes job if it isn't exist
-//		if !isJobExist {
-//			job.Labels = utils.AppendLabels(job.Labels, map[string]string{
-//				erdav1beta1.ErdaOperatorLabel: erda.Name,
-//				erdav1beta1.ErdaJobTypeLabel:  strings.ToLower(jobType),
-//			})
-//			newK8sJob := pkg.ComposeKubernetesJob(&job, erda.ComposeOwnerReferences())
-//			if err := r.Client.Create(context.Background(), &newK8sJob); err != nil {
-//				errMsg := fmt.Sprintf("create job %v failed", namespacedName)
-//				r.Log.Error(err, errMsg)
-//				result[job.Name] = erdav1beta1.Status{Status: erdav1beta1.ComponentStatusFailed, Message: errMsg}
-//				return result
-//			}
-//			result[job.Name] = erdav1beta1.Status{Status: erdav1beta1.ComponentStatusDeploying, Message: ""}
-//			return result
-//		}
-//
-//	}
-//	return result
-//}
+import (
+	"context"
+	"strings"
+	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
+	"github.com/erda-project/erda-operator/pkg/helper"
+)
+
+func (r *ErdaReconciler) ReconcileJob(ctx context.Context, erda *erdav1beta1.Erda, references []metav1.OwnerReference) error {
+	erdaJobMap := make(map[string]*erdav1beta1.Job)
+	// init status
+	if erda.Status == nil {
+		erda.Status = &erdav1beta1.ErdaStatus{}
+	}
+
+	if len(erda.Spec.Jobs) == 0 {
+		return nil
+	}
+
+	for _, job := range erda.Spec.Jobs {
+		if _, ok := erdaJobMap[job.Name]; ok {
+			erda.Status.Phase = erdav1beta1.PhaseFailed
+			if err := r.Status().Update(ctx, erda); err != nil {
+				return err
+			}
+			return fmt.Errorf("job name is duplicated, job: %s", job.Name)
+		}
+		erdaJobMap[job.Name] = &job
+	}
+
+	erdaJobStatusMap := make(map[string]erdav1beta1.StatusType)
+
+	// init job status
+	if erda.Status.Jobs == nil {
+		// reset all status, wait deploying
+		for _, job := range erda.Spec.Jobs {
+			erdaJobStatusMap[job.Name] = erdav1beta1.StatusUnKnown
+		}
+
+		erda.Status.Jobs = erdaJobStatusMap
+		erda.Status.Phase = erdav1beta1.PhaseInitialization
+		if err := r.Status().Update(ctx, erda); err != nil {
+			return err
+		}
+	} else {
+		// load current jobs status
+		for name, eJobStatus := range erda.Status.Jobs {
+			if _, ok := erdaJobMap[name]; !ok {
+				continue
+			}
+			erdaJobStatusMap[name] = eJobStatus
+		}
+	}
+
+	// check all jobs completed or not
+	isCompleted := true
+	for name, _ := range erdaJobMap {
+		if erdaJobStatusMap[name] != erdav1beta1.StatusCompleted {
+			isCompleted = false
+		}
+	}
+
+	if isCompleted {
+		// if all pre jobs completed, start to deploy applications
+		if erda.Status.Phase == erdav1beta1.PhaseInitialization {
+			erda.Status.Phase = erdav1beta1.PhaseDeploying
+			err := r.Status().Update(ctx, erda)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// list all jobs via labels
+	k8sJobs := batchv1.JobList{}
+	if err := r.List(context.Background(), &k8sJobs, client.InNamespace(erda.Namespace),
+		client.MatchingLabels{
+			erdav1beta1.ErdaOperatorLabel: "true",
+			erdav1beta1.ErdaJobTypeLabel:  strings.ToLower(erdav1beta1.PreJobType),
+		}); err != nil {
+		r.Log.Error(err, "list job err", "resource", erda.Name, "namespace", erda.Namespace)
+		return err
+	}
+
+	// job items
+	for _, kJob := range k8sJobs.Items {
+		erdaJobName := kJob.Labels[erdav1beta1.ErdaJobNameLabel]
+		_, ok := erdaJobMap[erdaJobName]
+		if !ok {
+			continue
+		}
+		// remove deployed job from map
+		delete(erdaJobMap, erdaJobName)
+		exeRes, jobCondition := helper.IsJobFinished(kJob)
+		if !exeRes {
+			erdaJobStatusMap[erdaJobName] = erdav1beta1.StatusRunning
+			continue
+		}
+		switch jobCondition.Type {
+		case batchv1.JobComplete:
+			erdaJobStatusMap[erdaJobName] = erdav1beta1.StatusCompleted
+		case batchv1.JobFailed:
+			erdaJobStatusMap[erdaJobName] = erdav1beta1.StatusFailed
+			erda.Status.Jobs = erdaJobStatusMap
+			erda.Status.Phase = erdav1beta1.PhaseFailed
+			if err := r.Status().Update(ctx, erda); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+
+	// job need to deploying
+	for _, eJob := range erdaJobMap {
+		eJob.Namespace = erda.Namespace
+		kJob := helper.ComposeKubernetesJob(erda.Name, eJob, references)
+		if err := r.Client.Create(context.Background(), &kJob); err != nil {
+			return err
+		}
+		erdaJobStatusMap[eJob.Name] = erdav1beta1.StatusRunning
+	}
+	erda.Status.Jobs = erdaJobStatusMap
+	erda.Status.Phase = erdav1beta1.PhaseInitialization
+	if err := r.Status().Update(ctx, erda); err != nil {
+		return err
+	}
+	return nil
+}

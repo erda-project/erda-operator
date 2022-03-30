@@ -22,6 +22,7 @@ import (
 
 	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
 	"github.com/erda-project/erda-operator/pkg/utils"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 const (
@@ -94,6 +95,18 @@ func ComposePodTemplateSpecByComponent(component *erdav1beta1.Component) corev1.
 		podTemplateSpec.Spec.ServiceAccountName = component.Annotations[erdav1beta1.AnnotationComponentSA]
 	}
 
+	// annotations inject
+	if component.Annotations[erdav1beta1.AnnotationComponentAnnotations] != "" {
+		annotations := make(map[string]string)
+		err := yaml.Unmarshal([]byte(component.Annotations[erdav1beta1.AnnotationComponentAnnotations]),
+			&annotations)
+		if err != nil {
+			// TODO: tips error
+			return podTemplateSpec
+		}
+		podTemplateSpec.Annotations = annotations
+	}
+
 	return podTemplateSpec
 }
 
@@ -137,19 +150,19 @@ func ComposePodTemplateSpecFromPodTemplate(spec corev1.PodTemplateSpec) corev1.P
 func ComposePodTemplateSpecByJob(job *erdav1beta1.Job) corev1.PodTemplateSpec {
 	podTemplateSpec := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:      job.Labels,
 			Annotations: job.Annotations,
+			Labels:      composeJobPodLabels(job),
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{
 				{
 					Name:            job.Name,
-					Resources:       job.Spec.Resources,
-					Image:           job.Spec.Image,
+					Resources:       job.Resources,
+					Image:           job.ImageInfo.Image,
 					ImagePullPolicy: corev1.PullAlways,
-					Env:             job.Spec.Envs,
-					Command:         job.Spec.Command,
+					Env:             job.Envs,
+					Command:         job.Command,
 				},
 			},
 			Affinity: ComposeAffinityByJob(job),
