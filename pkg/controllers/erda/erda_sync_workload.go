@@ -35,6 +35,58 @@ import (
 	"github.com/erda-project/erda-operator/pkg/utils"
 )
 
+func (r *ErdaReconciler) ReconcileApplication(ctx context.Context, erda *erdav1beta1.Erda, references []metav1.OwnerReference) error {
+	if erda == nil {
+		return nil
+	}
+	dependEnvs := utils.ComposeDependEnvs(*erda)
+	for _, app := range erda.Spec.Applications {
+		for _, component := range app.Components {
+			// set component.Namespace value from Erda.Namespace
+			component.Namespace = erda.Namespace
+			component.Labels = utils.MergeMap(app.Labels, component.Labels)
+			component.Annotations = utils.MergeMap(app.Annotations, component.Annotations)
+
+			err := r.SyncPersistentVolumeClaim(component)
+			if client.IgnoreNotFound(err) != nil {
+				r.Log.Error(err, "sync pvc error")
+				return err
+			}
+
+			// filter the existed secrets when be used in components
+			r.SyncConfigurations(&component)
+
+			if len(component.Network.ServiceDiscovery) > 0 {
+				component.Envs = append(component.Envs, utils.ComposeSelfADDREnv(component,
+					utils.ParseProtocol(app.Annotations[erdav1beta1.AnnotationSSLEnabled]))...)
+			}
+			component.Envs = append(component.Envs, utils.ComposeResourceToEnvs(component)...)
+			component.Envs = utils.MergeEnvs(app.Envs, component.Envs)
+			component.Envs = utils.ReplaceDependsEnv(dependEnvs, component.Envs)
+			component.Envs = utils.ReplaceEnvironments(component.Envs)
+
+			if component.EnvFrom != nil && app.EnvFrom != nil {
+				component.EnvFrom = append(app.EnvFrom, component.EnvFrom...)
+			} else {
+				component.EnvFrom = app.EnvFrom
+			}
+
+			err, _ = r.ReconcileWorkload(ctx, component, references)
+			if err != nil {
+				r.Log.Error(err, "reconcile workload error", "name", erda.Name, "namespace", erda.Namespace,
+					"component", component.Name)
+				return err
+			}
+		}
+	}
+
+	if err := r.SyncWorkLoadStatus(ctx, erda); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *ErdaReconciler) ReconcileWorkload(ctx context.Context,
 	component erdav1beta1.Component, references []metav1.OwnerReference) (error, bool) {
 	// set component.WorkLoad default value Stateless

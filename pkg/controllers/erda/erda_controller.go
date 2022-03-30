@@ -22,10 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
-	"github.com/erda-project/erda-operator/pkg/utils"
-	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 var (
@@ -76,49 +75,7 @@ func (r *ErdaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	dependEnvs := utils.ComposeDependEnvs(erda)
-
-	for _, app := range erda.Spec.Applications {
-		for _, component := range app.Components {
-			// set component.Namespace value from Erda.Namespace
-			component.Namespace = erda.Namespace
-			component.Labels = utils.MergeMap(app.Labels, component.Labels)
-			component.Annotations = utils.MergeMap(app.Annotations, component.Annotations)
-
-			err := r.SyncPersistentVolumeClaim(component)
-			if client.IgnoreNotFound(err) != nil {
-				log.Error(err, "sync pvc error")
-				return ctrl.Result{Requeue: true}, err
-			}
-
-			// filter the existed secrets when be used in components
-			r.SyncConfigurations(&component)
-
-			if len(component.Network.ServiceDiscovery) > 0 {
-				component.Envs = append(component.Envs, utils.ComposeSelfADDREnv(component,
-					utils.ParseProtocol(app.Annotations[erdav1beta1.AnnotationSSLEnabled]))...)
-			}
-			component.Envs = append(component.Envs, utils.ComposeResourceToEnvs(component)...)
-			component.Envs = utils.MergeEnvs(app.Envs, component.Envs)
-			component.Envs = utils.ReplaceDependsEnv(dependEnvs, component.Envs)
-			component.Envs = utils.ReplaceEnvironments(component.Envs)
-
-			if component.EnvFrom != nil && app.EnvFrom != nil {
-				component.EnvFrom = append(app.EnvFrom, component.EnvFrom...)
-			} else {
-				component.EnvFrom = app.EnvFrom
-			}
-
-			err, _ = r.ReconcileWorkload(ctx, component, references)
-			if err != nil {
-				log.Error(err, "reconcile workload error", "name", erda.Name, "namespace", erda.Namespace,
-					"component", component.Name)
-				return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
-			}
-		}
-	}
-
-	if err := r.SyncWorkLoadStatus(ctx, &erda); err != nil {
+	if err := r.ReconcileApplication(ctx, &erda, references); err != nil {
 		if errors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
