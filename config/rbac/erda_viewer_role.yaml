@@ -5,7 +5,7 @@ metadata:
   name: erda-viewer-role
 rules:
 - apiGroups:
-  - erda.erda.cloud
+  - core.erda.cloud
   resources:
   - erdas
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - erda.erda.cloud
+  - core.erda.cloud
   resources:
   - erdas/status
   verbs:

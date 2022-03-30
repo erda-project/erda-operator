@@ -16,7 +16,6 @@ package helper
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
@@ -114,20 +113,5 @@ func ComposeDeploymentSpecFromK8sDeployment(deployment *appsv1.Deployment) appsv
 		Selector:             deployment.Spec.Selector,
 		Template:             ComposePodTemplateSpecFromPodTemplate(deployment.Spec.Template),
 		RevisionHistoryLimit: deployment.Spec.RevisionHistoryLimit,
-	}
-}
-
-func ComposeKubernetesJob(job *erdav1beta1.Job, references []metav1.OwnerReference) batchv1.Job {
-	return batchv1.Job{
-		ObjectMeta: utils.ComposeObjectMetadataFromJob(job, references),
-		Spec: batchv1.JobSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: utils.AppendLabels(job.Labels, map[string]string{
-					erdav1beta1.ErdaComponentLabel: job.Name,
-				}),
-			},
-			TTLSecondsAfterFinished: func(in int32) *int32 { return &in }(JobTTLInterval),
-			Template:                ComposePodTemplateSpecByJob(job),
-		},
 	}
 }

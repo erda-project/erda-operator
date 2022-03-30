@@ -47,15 +47,6 @@ func ComposeObjectMetadataFromComponent(component *erdav1beta1.Component, refere
 		OwnerReferences: references,
 	}
 }
-func ComposeObjectMetadataFromJob(job *erdav1beta1.Job, references []metav1.OwnerReference) metav1.ObjectMeta {
-	return metav1.ObjectMeta{
-		Name:            job.Name,
-		Namespace:       job.Namespace,
-		Labels:          job.Labels,
-		Annotations:     job.Annotations,
-		OwnerReferences: references,
-	}
-}
 
 func ReplaceEnvironments(envs []corev1.EnvVar) []corev1.EnvVar {
 	replaceEnvs := map[string]string{}
@@ -86,6 +77,22 @@ func AppendLabels(originLabels, appendLabels map[string]string) map[string]strin
 		originLabels[k] = v
 	}
 	return originLabels
+}
+
+func MergeMap(originMap, destMap map[string]string) map[string]string {
+	if originMap == nil {
+		return destMap
+	}
+	if destMap == nil {
+		destMap = make(map[string]string)
+	}
+	for k, v := range originMap {
+		if _, ok := destMap[k]; ok {
+			continue
+		}
+		destMap[k] = v
+	}
+	return destMap
 }
 
 func MergeEnvs(originEnvs []corev1.EnvVar, destEnvs []corev1.EnvVar) []corev1.EnvVar {

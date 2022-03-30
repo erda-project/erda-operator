@@ -9,7 +9,7 @@ resources:
     namespaced: true
   controller: true
   domain: github.com
-  group: erda.erda.cloud
+  group: core.erda.cloud
   kind: Erda
   path: github.com/erda-project/erda-operator/api/v1beta1
   version: v1beta1

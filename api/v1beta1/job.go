@@ -17,19 +17,15 @@ package v1beta1
 import corev1 "k8s.io/api/core/v1"
 
 type Job struct {
-	JobMetadata `yaml:"metadata" json:"metadata"`
-	Spec        JobSpec `yaml:"spec" json:"spec"`
-}
-
-type JobMetadata struct {
-	Metadata  `yaml:",inline" json:",inline"`
-	Name      string `yaml:"-" json:"-"`
-	Namespace string `yaml:"-" json:"-"`
+	Metadata `yaml:",inline" json:",inline"`
+	JobSpec  `yaml:",inline" json:",inline"`
 }
 
 type JobSpec struct {
-	Image string `json:"image"`
-	// TODO: Command and Argus
+	//+kubebuilder:validation:Enum={PreJob}
+	Type      JobType                     `yaml:"type" json:"type"`
+	Retries   *int32                      `yaml:"retries,omitempty" json:"retries,omitempty"`
+	ImageInfo ImageInfo                   `yaml:"imageInfo" json:"imageInfo"`
 	Command   []string                    `yaml:"command,omitempty" json:"command,omitempty"`
 	Envs      []corev1.EnvVar             `yaml:"envs,omitempty" json:"envs,omitempty"`
 	Resources corev1.ResourceRequirements `yaml:"resources,omitempty" json:"resources,omitempty"`

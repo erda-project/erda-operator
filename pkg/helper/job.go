@@ -17,14 +17,55 @@ package helper
 import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
+	"fmt"
 )
 
-func IsJobFinished(job batchv1.Job) batchv1.JobCondition {
+var (
+	defaultBackOffLimit int32 = 6
+)
+
+func ComposeKubernetesJob(erdaName string, job *erdav1beta1.Job, references []metav1.OwnerReference) batchv1.Job {
+	return batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            fmt.Sprintf("%s-%s-%s", erdaName, strings.ToLower(string(job.Type)), job.Name),
+			Namespace:       job.Namespace,
+			Labels:          composeJobPodLabels(job),
+			Annotations:     job.Annotations,
+			OwnerReferences: references,
+		},
+		Spec: batchv1.JobSpec{
+			BackoffLimit: func(in *int32) *int32 {
+				if in == nil {
+					return &defaultBackOffLimit
+				}
+				return in
+			}(job.Retries),
+			TTLSecondsAfterFinished: func(in int32) *int32 { return &in }(JobTTLInterval),
+			Template:                ComposePodTemplateSpecByJob(job),
+		},
+	}
+}
+
+func composeJobPodLabels(job *erdav1beta1.Job) map[string]string {
+	if job.Labels == nil {
+		job.Labels = make(map[string]string)
+	}
+	job.Labels[erdav1beta1.ErdaOperatorLabel] = "true"
+	job.Labels[erdav1beta1.ErdaJobNameLabel] = job.Name
+	job.Labels[erdav1beta1.ErdaJobTypeLabel] = strings.ToLower(string(job.Type))
+	return job.Labels
+}
+
+func IsJobFinished(job batchv1.Job) (bool, batchv1.JobCondition) {
 	for _, c := range job.Status.Conditions {
 		if (c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed) &&
 			c.Status == corev1.ConditionTrue {
-			return c
+			return true, c
 		}
 	}
-	return batchv1.JobCondition{}
+
+	return false, batchv1.JobCondition{}
 }

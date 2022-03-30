@@ -23,7 +23,6 @@ type StatusType string
 const (
 	StatusReady     StatusType = "Ready"
 	StatusDeploying StatusType = "Deploying"
-	StatusUnReady   StatusType = "Unready"
 	StatusRunning   StatusType = "Running"
 	StatusFailed    StatusType = "Failed"
 	StatusCompleted StatusType = "Completed"
@@ -33,18 +32,22 @@ const (
 type PhaseType string
 
 const (
-	PhaseReady     PhaseType = "Ready"
-	PhaseDeploying PhaseType = "Deploying"
+	PhaseReady          PhaseType = "Ready"
+	PhaseFailed         PhaseType = "Failed"
+	PhaseInitialization PhaseType = "Initialization"
+	PhaseDeploying      PhaseType = "Deploying"
+)
+
+type JobType string
+
+const (
+	ErdaPrefix = "erda"
+	PreJobType = "PreJob"
 )
 
 const (
-	ErdaPrefix  = "erda"
-	PreJobType  = "PreJob"
-	PostJobType = "PostJob"
-)
-
-const (
-	ErdaJobTypeLabel   = "erda/job-type"
+	ErdaJobTypeLabel   = "app.erda.cloud/job-type"
+	ErdaJobNameLabel   = "app.erda.cloud/job-name"
 	ErdaComponentLabel = "app.erda.cloud/component"
 	ErdaOperatorLabel  = "app.erda.cloud/operator"
 )
@@ -81,19 +84,18 @@ type ErdaSpec struct {
 	// TODO: There are two questions about pre-job tasks and post-job tasks:
 	// TODO: 1. How to deal with the job task when it is failed? delete and recreate it?
 	// TODO: 2. How to deal with the job task when it is completed and the user updates the DICE YAML
-	//PreJobs      []Job                  `yaml:"preJobs,omitempty" json:"preJobs,omitempty"`
-	//PostJobs     []Job                  `yaml:"postJobs,omitempty" json:"postJobs,omitempty"`
+	Jobs []Job `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
+	//PostJobs     []Job                  `yaml:"postJobs,omitempty" json:"postJobs,omitempty"`
 	// TODO: Finish the addons design
 	// Addons       map[string]Addon       `yaml:"envs,omitempty" json:"addons"`
 }
 
 // ErdaStatus defines the observed state of Erda
 type ErdaStatus struct {
-	Phase        PhaseType           `yaml:"phase,omitempty" json:"phase,omitempty"`
-	Applications []ApplicationStatus `yaml:"applications,omitempty" json:"applications,omitempty"`
-	//PreJobStatus      map[string]Status        `json:"preJobStatus,omitempty"`
-	//PostJobStatus     map[string]Status        `json:"postJobStatus,omitempty"`
+	Phase        PhaseType             `yaml:"phase,omitempty" json:"phase,omitempty"`
+	Applications []ApplicationStatus   `yaml:"applications,omitempty" json:"applications,omitempty"`
+	Jobs         map[string]StatusType `json:"jobs,omitempty"`
 }
 
 type ApplicationStatus struct {

@@ -41,15 +41,17 @@ func ComposeIngressV1(component *erdav1beta1.Component, references []metav1.Owne
 	}
 
 	// ingress snippet with annotation
-	s := component.Annotations[erdav1beta1.AnnotationIngressAnnotation]
-	if s != "" {
-		res := make(map[string]string)
-		if err := yaml.Unmarshal([]byte(s), &res); err != nil {
-			// TODO: error tips
-			return ingress
-		}
-		ingress.Annotations = res
+	ingAnnotations := component.Annotations[erdav1beta1.AnnotationIngressAnnotation]
+	if ingAnnotations == "" {
+		return ingress
 	}
+
+	fmtIngAnnotations := make(map[string]string)
+	if err := yaml.Unmarshal([]byte(ingAnnotations), &fmtIngAnnotations); err != nil {
+		// TODO: error tips
+		return ingress
+	}
+	ingress.Annotations = fmtIngAnnotations
 
 	return ingress
 }
