@@ -288,7 +288,6 @@ func (r *ErdaReconciler) SyncWorkLoadStatus(ctx context.Context, erda *erdav1bet
 	}
 
 	if err := r.Status().Update(ctx, erda); err != nil {
-		r.Log.Error(err, "update status error")
 		return err
 	}
 

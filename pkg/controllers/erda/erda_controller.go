@@ -25,6 +25,7 @@ import (
 
 	erdav1beta1 "github.com/erda-project/erda-operator/api/v1beta1"
 	"github.com/erda-project/erda-operator/pkg/utils"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 var (
@@ -62,6 +63,9 @@ func (r *ErdaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if len(erda.Spec.Jobs) > 0 {
 		if err := r.ReconcileJob(ctx, &erda, references); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
 		}
 		switch erda.Status.Phase {
@@ -115,6 +119,9 @@ func (r *ErdaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if err := r.SyncWorkLoadStatus(ctx, &erda); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
 	}
 
