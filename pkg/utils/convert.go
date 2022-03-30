@@ -15,8 +15,14 @@ package utils
 
 import (
 	"strings"
+	"os"
 
 	corev1 "k8s.io/api/core/v1"
+	"gopkg.in/yaml.v2"
+)
+
+const (
+	GlobalServiceAnnotations = "GLOBAL_SERVICE_ANNOTATIONS"
 )
 
 // ConvertToHostAlias 转换 hosts []string 格式为 k8s.io/api/core/v1.HostAlias 格式
@@ -33,4 +39,29 @@ func ConvertToHostAlias(hosts []string) []corev1.HostAlias {
 		})
 	}
 	return r
+}
+
+func ConvertAnnotations(originAnnotations map[string]string) map[string]string {
+	if originAnnotations == nil {
+		originAnnotations = make(map[string]string)
+	}
+	annotations := os.Getenv(GlobalServiceAnnotations)
+	if annotations == "" {
+		return originAnnotations
+	}
+
+	globalAnnotations := make(map[string]string)
+	err := yaml.Unmarshal([]byte(annotations), &globalAnnotations)
+	if err != nil {
+		return originAnnotations
+	}
+
+	for k, v := range globalAnnotations {
+		if _, ok := originAnnotations[k]; ok {
+			continue
+		}
+		originAnnotations[k] = v
+	}
+
+	return originAnnotations
 }

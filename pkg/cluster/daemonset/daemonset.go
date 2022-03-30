@@ -149,7 +149,7 @@ func BuildDaemonSet(
 						"dice/koperator":    "true",
 						"dice/cluster-name": clus.Name,
 					},
-					Annotations: dicesvc.Annotations,
+					Annotations: utils.ConvertAnnotations(dicesvc.Annotations),
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: utils.GenSAName(dicesvcname),
