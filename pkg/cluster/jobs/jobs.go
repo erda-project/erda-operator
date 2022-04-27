@@ -31,6 +31,7 @@ import (
 	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
+	clusterutils "github.com/erda-project/dice-operator/pkg/cluster/utils"
 )
 
 const (
@@ -88,7 +89,7 @@ func buildJobs(dicejobs diceyml.Jobs, clus *spec.DiceCluster, ownerRefs []metav1
 						Namespace: clus.Namespace,
 					},
 					Spec: corev1.PodSpec{
-						ServiceAccountName: utils.GenSAName(""),
+						ServiceAccountName: clusterutils.GenSAName(""),
 						RestartPolicy:      "Never",
 						Containers: []corev1.Container{{
 							Name:            name,

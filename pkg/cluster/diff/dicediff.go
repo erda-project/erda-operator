@@ -22,6 +22,7 @@ import (
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
+	"github.com/erda-project/dice-operator/pkg/utils"
 )
 
 const (
@@ -39,6 +40,7 @@ const (
 	fdpMetaManager   = "fdp-metadata-manager"
 	fdpWorkflow      = "fdp-workflow"
 	collector        = "collector"
+	pipeline         = "pipeline"
 )
 
 type SpecDiff struct {
@@ -392,6 +394,11 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 		fdpMetaManager,
 		fdpWorkflow,
 	}
+
+	if utils.IsPipelineEdgeEnabled() {
+		edgeSvcList = append(edgeSvcList, pipeline)
+	}
+
 	sort.Strings(edgeSvcList)
 	f := func(m map[string]*diceyml.Service) {
 		for k := range m {
