@@ -90,7 +90,7 @@ func GenHTTPIngressPaths(diceSvcName string, exposePort int) []extensions.HTTPIn
 		},
 	}
 
-	if diceSvcName == "cluster-dialer" {
+	if diceSvcName == "cluster-dialer" || diceSvcName == "cluster-manager" {
 		httpIngressPath.Path = "/clusteragent/connect"
 	}
 
