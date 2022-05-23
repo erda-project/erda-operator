@@ -26,6 +26,7 @@ import (
 
 const (
 	fdpAgent         = "fdp-agent"
+	fdpDataService   = "fdp-dataservice"
 	fluentbit        = "fluent-bit"
 	filebeat         = "filebeat"
 	soldier          = "soldier"
@@ -378,6 +379,7 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 func (d *SpecDiff) filterEdgeClusterServices() {
 	edgeSvcList := []string{
 		fdpAgent,
+		fdpDataService,
 		telegrafApp,
 		telegrafAppEdge,
 		fluentbit,
@@ -389,7 +391,6 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 		ClusterAgent,
 		fdpMetaManager,
 		fdpWorkflow,
-		collector,
 	}
 	sort.Strings(edgeSvcList)
 	f := func(m map[string]*diceyml.Service) {
