@@ -32,6 +32,7 @@ import (
 	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
+	clusterutils "github.com/erda-project/dice-operator/pkg/cluster/utils"
 )
 
 const (
@@ -152,7 +153,7 @@ func BuildDaemonSet(
 					Annotations: utils.ConvertAnnotations(dicesvc.Annotations),
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: utils.GenSAName(dicesvcname),
+					ServiceAccountName: clusterutils.GenSAName(dicesvcname),
 					Containers: []corev1.Container{{
 						Name:            dicesvcname,
 						EnvFrom:         deployment.EnvsFrom(clus),

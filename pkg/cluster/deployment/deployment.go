@@ -33,6 +33,7 @@ import (
 	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
+	clusterutils "github.com/erda-project/dice-operator/pkg/cluster/utils"
 )
 
 const (
@@ -43,9 +44,11 @@ const (
 	DefaultSecretName        = "erda-etcd-client-secret"
 	CPUBound                 = "cpu_bound"
 	IOBound                  = "io_bound"
-	ErdaClusterCredential    = "erda-cluster-credential"
-	EnableDatabaseTLS        = "ENABLE_DATABASE_TLS"
-	DatabaseTlsSecretName    = "erda-database-tls"
+
+	ErdaClusterCredential = "erda-cluster-credential"
+
+	EnableDatabaseTLS     = "ENABLE_DATABASE_TLS"
+	DatabaseTlsSecretName = "erda-database-tls"
 )
 
 func GenName(dicesvcname string, clus *spec.DiceCluster) string {
@@ -188,12 +191,12 @@ func BuildDeployment(
 					Annotations: utils.ConvertAnnotations(dicesvc.Annotations),
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: utils.GenSAName(dicesvcname),
+					ServiceAccountName: clusterutils.GenSAName(dicesvcname),
 					Containers: []corev1.Container{
 						{
 							Name:            dicesvcname,
 							Env:             Envs(dicesvcname, dicesvc, clus),
-							EnvFrom:         EnvsFrom(clus),
+							EnvFrom:         EnvsFromWithSrv(clus, dicesvcname),
 							Image:           dicesvc.Image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							LivenessProbe:   &livenessprobe,
@@ -292,6 +295,23 @@ func EnvsFrom(clus *spec.DiceCluster) []corev1.EnvFromSource {
 			},
 		},
 	}
+}
+
+func EnvsFromWithSrv(clus *spec.DiceCluster, dicesvcname string) []corev1.EnvFromSource {
+	r := EnvsFrom(clus)
+	if len(clus.Spec.MainPlatform) == 0 {
+		return r
+	}
+	if utils.IsPipelineEdgeEnabled() && dicesvcname == "pipeline" {
+		r = append(r, corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: ErdaClusterCredential,
+				},
+			},
+		})
+	}
+	return r
 }
 
 func PatchContainer(originContainer, patchContainer corev1.Container) (*corev1.Container, error) {
