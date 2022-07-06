@@ -28,6 +28,10 @@ import (
 
 const (
 	EnableSpecifiedNamespace = "ENABLE_SPECIFIED_NAMESPACE"
+	CustomRegCredSecret      = "CUSTOM_REGCRED_SECRET"
+	ErdaCustomRegCredSecret  = "aliyun-registry"
+	Pipeline                 = "pipeline"
+	Orchestrator             = "orchestrator"
 )
 
 func GetAllServices(cluster *spec.DiceCluster) []diceyml.Services {
@@ -59,6 +63,10 @@ func InjectENVs(clusterInfo map[string]string, envs map[string]map[string]string
 
 	for _, services := range GetAllServices(cluster) {
 		for name, svc := range services {
+			if svc == nil {
+				continue
+			}
+			injectServiceGlobalEnv(name, svc)
 			// 注入depend-envs
 			injectByDependsOn(name, svc, dependMap)
 			// 注入 addons-info ConfigMap
@@ -73,6 +81,17 @@ func InjectENVs(clusterInfo map[string]string, envs map[string]map[string]string
 			// 注入update.txt-envs
 			promoteUpdatetxtEnvs(svc)
 		}
+	}
+}
+
+func injectServiceGlobalEnv(name string, svc *diceyml.Service) {
+	if svc.Envs == nil {
+		svc.Envs = make(map[string]string)
+	}
+
+	if name == Pipeline || name == Orchestrator {
+		// registry credential secret name
+		svc.Envs[CustomRegCredSecret] = ErdaCustomRegCredSecret
 	}
 }
 
