@@ -39,7 +39,7 @@ const (
 	ClusterAgent     = "cluster-agent"
 	fdpMetaManager   = "fdp-metadata-manager"
 	fdpWorkflow      = "fdp-workflow"
-	collector        = "collector"
+	collectorAgent   = "collector-agent"
 	pipeline         = "pipeline"
 	fdpMetrics       = "fdp-metrics"
 )
@@ -395,6 +395,7 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 		fdpMetaManager,
 		fdpWorkflow,
 		fdpMetrics,
+		collectorAgent,
 	}
 
 	if utils.IsPipelineEdgeEnabled() {
