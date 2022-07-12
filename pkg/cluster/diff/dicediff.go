@@ -42,6 +42,7 @@ const (
 	collector        = "collector"
 	pipeline         = "pipeline"
 	fdpMetrics       = "fdp-metrics"
+	fdpDLC           = "fdp-dlc"
 )
 
 type SpecDiff struct {
@@ -395,6 +396,7 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 		fdpMetaManager,
 		fdpWorkflow,
 		fdpMetrics,
+		fdpDLC,
 	}
 
 	if utils.IsPipelineEdgeEnabled() {
