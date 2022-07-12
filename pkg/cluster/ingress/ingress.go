@@ -31,6 +31,9 @@ import (
 
 const (
 	EnableComponentAccessLog = "ENABLE_COMPONENT_ACCESS_LOG"
+	ClusterManager           = "cluster-manager"
+	Openapi                  = "openapi"
+	AgentRegisterPath        = "/clusteragent/connect"
 )
 
 func HasIngress(dicesvc *diceyml.Service) bool {
@@ -90,11 +93,18 @@ func GenHTTPIngressPaths(diceSvcName string, exposePort int) []extensions.HTTPIn
 		},
 	}
 
-	if diceSvcName == "cluster-dialer" || diceSvcName == "cluster-manager" {
-		httpIngressPath.Path = "/clusteragent/connect"
-	}
-
 	httpIngressPaths = append(httpIngressPaths, httpIngressPath)
+
+	if diceSvcName == Openapi {
+		// TODO: remove register interface
+		httpIngressPaths = append(httpIngressPaths, extensions.HTTPIngressPath{
+			Backend: extensions.IngressBackend{
+				ServiceName: ClusterManager,
+				ServicePort: intstr.FromInt(80),
+			},
+			Path: AgentRegisterPath,
+		})
+	}
 	return httpIngressPaths
 }
 
