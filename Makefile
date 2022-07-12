@@ -14,7 +14,7 @@
 GO_PROJECT_ROOT := github.com/erda-project/erda
 
 ifeq ($(GO_PROXY_ENV),)
-	GO_PROXY := "https://proxy.golang.org,direct"
+	GO_PROXY := "https://goproxy.cn,direct"
 else
 	GO_PROXY := $(GO_PROXY_ENV)
 endif
