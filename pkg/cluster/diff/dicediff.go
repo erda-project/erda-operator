@@ -39,6 +39,7 @@ const (
 	fdpMetaManager   = "fdp-metadata-manager"
 	fdpWorkflow      = "fdp-workflow"
 	collector        = "collector"
+	fdpDLC           = "fdp-dlc"
 )
 
 type SpecDiff struct {
@@ -391,6 +392,7 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 		ClusterAgent,
 		fdpMetaManager,
 		fdpWorkflow,
+		fdpDLC,
 	}
 	sort.Strings(edgeSvcList)
 	f := func(m map[string]*diceyml.Service) {
