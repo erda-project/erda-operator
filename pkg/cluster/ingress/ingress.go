@@ -33,6 +33,7 @@ const (
 	EnableComponentAccessLog = "ENABLE_COMPONENT_ACCESS_LOG"
 	ClusterManager           = "cluster-manager"
 	Openapi                  = "openapi"
+	ErdaServer               = "erda-server"
 	AgentRegisterPath        = "/clusteragent/connect"
 )
 
@@ -95,7 +96,7 @@ func GenHTTPIngressPaths(diceSvcName string, exposePort int) []extensions.HTTPIn
 
 	httpIngressPaths = append(httpIngressPaths, httpIngressPath)
 
-	if diceSvcName == Openapi {
+	if diceSvcName == ErdaServer {
 		// TODO: remove register interface
 		httpIngressPaths = append(httpIngressPaths, extensions.HTTPIngressPath{
 			Backend: extensions.IngressBackend{
@@ -161,6 +162,12 @@ func buildIngress(
 
 func convertHost(dicesvcname string, clus *spec.DiceCluster) []string {
 	customdomainMap := clus.Spec.CustomDomain
+
+	// Rename, logic will in tools render future.
+	// erda-server.* will convert to openapi.*
+	if dicesvcname == ErdaServer {
+		dicesvcname = Openapi
+	}
 
 	if domains, ok := customdomainMap[dicesvcname]; ok {
 		return strutil.Map(strutil.Split(domains, ",", true), func(s string) string { return strutil.Trim(s) })
