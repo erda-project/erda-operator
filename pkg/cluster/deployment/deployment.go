@@ -44,6 +44,8 @@ const (
 	CPUBound                 = "cpu_bound"
 	IOBound                  = "io_bound"
 	ErdaClusterCredential    = "erda-cluster-credential"
+	EnableDatabaseTLS        = "ENABLE_DATABASE_TLS"
+	DatabaseTlsSecretName    = "erda-database-tls"
 )
 
 func GenName(dicesvcname string, clus *spec.DiceCluster) string {
@@ -562,6 +564,13 @@ func Envs(dicesvcname string, dicesvc *diceyml.Service, clus *spec.DiceCluster) 
 		Value: fmt.Sprintf("%d", maxInt(dicesvc.Resources.Mem, dicesvc.Resources.MaxMem)),
 	})
 
+	if os.Getenv(EnableDatabaseTLS) == "true" {
+		r = append(r, corev1.EnvVar{
+			Name:  "MYSQL_CACERTPATH",
+			Value: fmt.Sprintf("/%s", DatabaseTlsSecretName),
+		})
+	}
+
 	return r
 }
 
@@ -762,6 +771,23 @@ func Volumes(dicesvc *diceyml.Service) (volumes []corev1.Volume, volumeMounts []
 			MountPath: "/certs/",
 		})
 	}
+
+	if os.Getenv(EnableDatabaseTLS) == "true" {
+		volumes = append(volumes, corev1.Volume{
+			Name: DatabaseTlsSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: DatabaseTlsSecretName,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      DatabaseTlsSecretName,
+			ReadOnly:  true,
+			MountPath: fmt.Sprintf("/%s", DatabaseTlsSecretName),
+		})
+	}
+
 	return
 }
 
