@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	extensions "k8s.io/api/extensions/v1beta1"
@@ -93,30 +94,36 @@ func (l *Launcher) Launch() error {
 
 	var failed bool
 	var errMsg string
-	if err := l.MultiLaunch(l.Actions.UpdatedServices, l.launchUpdatedService, UpdateService); err != nil {
-		errMsg = errMsg + fmt.Sprintf("update service err %v;", err)
-		failed = true
-	}
-	if err := l.MultiLaunch(l.Actions.DeletedServices, l.launchDeletedService, DeleteService); err != nil {
+
+	logrus.Debugf("starting to launch service delete process")
+	if err := l.LaunchWaitDone(l.Actions.DeletedServices, l.launchDeletedService, DeleteService); err != nil {
 		errMsg = errMsg + fmt.Sprintf("delete service err %v;", err)
 		failed = true
 	}
-	if err := l.MultiLaunch(l.Actions.AddedServices, l.launchAddedService, AddService); err != nil {
-		errMsg = errMsg + fmt.Sprintf("add service err %v;", err)
+	if err := l.LaunchWaitDone(l.Actions.DeletedDaemonSet, l.launchDeletedDS, DeleteDaemonSet); err != nil {
+		errMsg = errMsg + fmt.Sprintf("delete daemonset err %v;", err)
+		failed = true
+	}
+	logrus.Debugf("finished to launch service delete process")
+
+	logrus.Debugf("starting to multilaunch add and update process")
+	if err := l.MultiLaunch(l.Actions.UpdatedServices, l.launchUpdatedService, UpdateService); err != nil {
+		errMsg = errMsg + fmt.Sprintf("update service err %v;", err)
 		failed = true
 	}
 	if err := l.MultiLaunch(l.Actions.UpdatedDaemonSet, l.launchUpdatedDS, UpdateDaemonSet); err != nil {
 		errMsg = errMsg + fmt.Sprintf("update daemonset err %v;", err)
 		failed = true
 	}
-	if err := l.MultiLaunch(l.Actions.DeletedDaemonSet, l.launchDeletedDS, DeleteDaemonSet); err != nil {
-		errMsg = errMsg + fmt.Sprintf("delete daemonset err %v;", err)
+	if err := l.MultiLaunch(l.Actions.AddedServices, l.launchAddedService, AddService); err != nil {
+		errMsg = errMsg + fmt.Sprintf("add service err %v;", err)
 		failed = true
 	}
 	if err := l.MultiLaunch(l.Actions.AddedDaemonSet, l.LaunchAddedDS, AddDaemonSet); err != nil {
 		errMsg = errMsg + fmt.Sprintf("add daemonset err %v;", err)
 		failed = true
 	}
+	logrus.Debugf("finished to multilaunch add and update process")
 
 	if failed {
 		return errors.New("launch failed " + errMsg)
@@ -182,6 +189,60 @@ func (l *Launcher) launchTmpStuff() error {
 	return nil
 
 }
+
+func (l *Launcher) LaunchWaitDone(components map[string]*diceyml.Service, fun launchFunc, opt string) error {
+	statusAdapter := cluStatus.New(l.client, l.restclient, l.targetspec)
+	count := len(components)
+	c := make(chan result, count)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(len(components))
+
+	for svcName, svc := range components {
+		if strings.Index(opt, "delete") <= 0 {
+			_ = status.UpdateComponentStatus(l.restclient, l.targetspec.Namespace, l.targetspec.Name,
+				map[string]spec.ComponentStatus{svcName: spec.ComponentStatusDeploying})
+		}
+		logrus.Debugf("gona to %s %s", opt, svcName)
+		go func(svcName string, svc *diceyml.Service) {
+			defer wg.Done()
+			fun(c, svcName, svc)
+		}(svcName, svc)
+	}
+
+	wg.Wait()
+
+	var failedComponents []string
+	for range make([]int, count) {
+		result, ok := <-c
+		if !ok {
+			logrus.Info("no data to get.")
+			break
+		}
+
+		if !result.Complete {
+			failedComponents = append(failedComponents, result.SvcName)
+			logrus.Errorf("%s %s failed. error: %s", opt, result.SvcName, result.Msg)
+		}
+
+		if result.Phase != "" {
+			// update component phase
+			_ = status.UpdateConditionAndPhase(l.restclient, l.targetspec, l.targetspec.Namespace,
+				l.targetspec.Name, spec.Condition{Reason: result.Msg}, result.Phase)
+
+			// update component status
+			_ = statusAdapter.Update(l.targetspec.Name)
+		}
+	}
+
+	// return error, when execute failed
+	if len(failedComponents) != 0 {
+		msg := fmt.Sprintf("%s: %s failed", opt, strings.Join(failedComponents, ","))
+		return errors.New(msg)
+	}
+	return nil
+}
+
 func (l *Launcher) MultiLaunch(components map[string]*diceyml.Service, fun launchFunc, opt string) error {
 	statusAdapter := cluStatus.New(l.client, l.restclient, l.targetspec)
 	count := len(components)
@@ -192,6 +253,7 @@ func (l *Launcher) MultiLaunch(components map[string]*diceyml.Service, fun launc
 			_ = status.UpdateComponentStatus(l.restclient, l.targetspec.Namespace, l.targetspec.Name,
 				map[string]spec.ComponentStatus{svcName: spec.ComponentStatusDeploying})
 		}
+		logrus.Debugf("gona to %s %s", opt, svcName)
 		go fun(c, svcName, svc)
 	}
 
