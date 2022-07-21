@@ -49,6 +49,7 @@ func GetAllServices(cluster *spec.DiceCluster) []diceyml.Services {
 		cluster.Spec.Hepa.Services,
 		cluster.Spec.SpotMonitor.Services,
 		cluster.Spec.Fdp.Services,
+		cluster.Spec.FdpUI.Services,
 		cluster.Spec.MeshController.Services,
 	}
 }

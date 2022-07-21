@@ -193,7 +193,15 @@ type SpecDiff struct {
 	currentFdpServices map[string]*diceyml.Service
 	targetFdpServices  map[string]*diceyml.Service
 
-	// spec.meshController
+	// spec.fdpUI
+	fdpUIGlobalEnvDiff    bool
+	currentFdpUIGlobalEnv map[string]string
+	targetFdpUIGlobalEnv  map[string]string
+
+	fdpUIServiceDiff     bool
+	currentFdpUIServices map[string]*diceyml.Service
+	targetFdpUIServices  map[string]*diceyml.Service
+
 	meshControllerGlobalEnvDiff    bool
 	currentMeshControllerGlobalEnv map[string]string
 	targetMeshControllerGlobalEnv  map[string]string
@@ -286,6 +294,8 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 		targetSpotMonitorGlobalEnv:     make(map[string]string),
 		currentFdpGlobalEnv:            make(map[string]string),
 		targetFdpGlobalEnv:             make(map[string]string),
+		currentFdpUIGlobalEnv:          make(map[string]string),
+		targetFdpUIGlobalEnv:           make(map[string]string),
 		currentMeshControllerGlobalEnv: make(map[string]string),
 		targetMeshControllerGlobalEnv:  make(map[string]string),
 		currentFluentBitGlobalEnv:      make(map[string]string),
@@ -323,6 +333,8 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 		targetSpotMonitorServices:     make(map[string]*diceyml.Service),
 		currentFdpServices:            make(map[string]*diceyml.Service),
 		targetFdpServices:             make(map[string]*diceyml.Service),
+		currentFdpUIServices:          make(map[string]*diceyml.Service),
+		targetFdpUIServices:           make(map[string]*diceyml.Service),
 		currentMeshControllerServices: make(map[string]*diceyml.Service),
 		targetMeshControllerServices:  make(map[string]*diceyml.Service),
 		currentFluentBitServices:      make(map[string]*diceyml.Service),
@@ -352,6 +364,7 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 	diffHepa(*diceyml.CopyObj(&current.Spec.Hepa), *diceyml.CopyObj(&target.Spec.Hepa), &r)
 	diffSpotMonitor(*diceyml.CopyObj(&current.Spec.SpotMonitor), *diceyml.CopyObj(&target.Spec.SpotMonitor), &r)
 	diffFdp(*diceyml.CopyObj(&current.Spec.Fdp), *diceyml.CopyObj(&target.Spec.Fdp), &r)
+	diffFdpUI(*diceyml.CopyObj(&current.Spec.FdpUI), *diceyml.CopyObj(&target.Spec.FdpUI), &r)
 	diffMeshController(*diceyml.CopyObj(&current.Spec.MeshController), *diceyml.CopyObj(&target.Spec.MeshController), &r)
 	diffFluentBit(*diceyml.CopyObj(&current.Spec.FluentBit), *diceyml.CopyObj(&target.Spec.FluentBit), &r)
 	if len(target.Spec.MainPlatform) > 0 {
@@ -417,6 +430,8 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 	f(d.targetSpotMonitorServices)
 	f(d.currentFdpServices)
 	f(d.targetFdpServices)
+	f(d.currentFdpUIServices)
+	f(d.targetFdpUIServices)
 	f(d.currentMeshControllerServices)
 	f(d.targetMeshControllerServices)
 	f(d.currentFluentBitServices)
@@ -697,6 +712,21 @@ func (d *SpecDiff) GetActions() *Actions {
 	} else {
 		mergemap(r.UpdatedServices, differentServices)
 	}
+
+	// spec.fdpUI
+	missingInSet1, missingInSet2, shared = diffServiceset(d.currentFdpUIServices, d.targetFdpUIServices)
+	differentServices = getDifferentServices(d.currentFdpUIServices, d.targetFdpUIServices, shared)
+	expandGlobalEnv(d.targetFdpUIGlobalEnv, missingInSet1)
+	expandGlobalEnv(d.targetFdpUIGlobalEnv, missingInSet2)
+	expandGlobalEnv(d.targetFdpUIGlobalEnv, shared)
+
+	mergemap(r.AddedServices, missingInSet1)
+	mergemap(r.DeletedServices, missingInSet2)
+	if d.fdpUIGlobalEnvDiff {
+		mergemap(r.UpdatedServices, shared)
+	} else {
+		mergemap(r.UpdatedServices, differentServices)
+	}
 	// spec.meshController
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentMeshControllerServices, d.targetMeshControllerServices)
 	differentServices = getDifferentServices(d.currentMeshControllerServices, d.targetMeshControllerServices, shared)
@@ -752,6 +782,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.hepaGlobalEnvDiff = true
 	specdiff.spotMonitorGlobalEnvDiff = true
 	specdiff.fdpGlobalEnvDiff = true
+	specdiff.fdpUIGlobalEnvDiff = true
 	specdiff.meshControllerGlobalEnvDiff = true
 	specdiff.fluentBitGlobalEnvDiff = true
 
@@ -771,6 +802,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	hepa := diceyml.CopyObj(&target.Spec.Hepa)
 	spotMonitor := diceyml.CopyObj(&target.Spec.SpotMonitor)
 	fdp := diceyml.CopyObj(&target.Spec.Fdp)
+	fdpUI := diceyml.CopyObj(&target.Spec.FdpUI)
 	meshController := diceyml.CopyObj(&target.Spec.MeshController)
 	fluentBit := diceyml.CopyObj(&target.Spec.FluentBit)
 
@@ -790,6 +822,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.targetHepaGlobalEnv = hepa.Envs
 	specdiff.targetSpotMonitorGlobalEnv = spotMonitor.Envs
 	specdiff.targetFdpGlobalEnv = fdp.Envs
+	specdiff.targetFdpUIGlobalEnv = fdpUI.Envs
 	specdiff.targetMeshControllerGlobalEnv = meshController.Envs
 	specdiff.targetFluentBitGlobalEnv = fluentBit.Envs
 
@@ -809,6 +842,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.hepaServiceDiff = true
 	specdiff.spotMonitorServiceDiff = true
 	specdiff.fdpServiceDiff = true
+	specdiff.fdpUIServiceDiff = true
 	specdiff.meshControllerServiceDiff = true
 	specdiff.fluentBitServiceDiff = true
 
@@ -828,6 +862,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	specdiff.targetHepaServices = hepa.Services
 	specdiff.targetSpotMonitorServices = spotMonitor.Services
 	specdiff.targetFdpServices = fdp.Services
+	specdiff.targetFdpUIServices = fdpUI.Services
 	specdiff.targetMeshControllerServices = meshController.Services
 	specdiff.targetFluentBitServices = fluentBit.Services
 
@@ -905,6 +940,10 @@ func diffSpotMonitor(current, target diceyml.Object, specdiff *SpecDiff) {
 func diffFdp(current, target diceyml.Object, specdiff *SpecDiff) {
 	diffFdpGlobalEnv(current.Envs, target.Envs, specdiff)
 	diffFdpServices(current.Services, target.Services, specdiff)
+}
+func diffFdpUI(current, target diceyml.Object, specdiff *SpecDiff) {
+	diffFdpUIGlobalEnv(current.Envs, target.Envs, specdiff)
+	diffFdpUIServices(current.Services, target.Services, specdiff)
 }
 func diffMeshController(current, target diceyml.Object, specdiff *SpecDiff) {
 	diffMeshControllerGlobalEnv(current.Envs, target.Envs, specdiff)
@@ -999,6 +1038,11 @@ func diffFdpGlobalEnv(current, target map[string]string, specdiff *SpecDiff) {
 	auxDiffGlobalEnv(current, target,
 		&specdiff.currentFdpGlobalEnv, &specdiff.targetFdpGlobalEnv,
 		&specdiff.fdpGlobalEnvDiff)
+}
+func diffFdpUIGlobalEnv(current, target map[string]string, specdiff *SpecDiff) {
+	auxDiffGlobalEnv(current, target,
+		&specdiff.currentFdpUIGlobalEnv, &specdiff.targetFdpUIGlobalEnv,
+		&specdiff.fdpUIGlobalEnvDiff)
 }
 func diffMeshControllerGlobalEnv(current, target map[string]string, specdiff *SpecDiff) {
 	auxDiffGlobalEnv(current, target,
@@ -1113,6 +1157,11 @@ func diffFdpServices(current, target map[string]*diceyml.Service, specdiff *Spec
 	auxDiffServices(current, target,
 		&specdiff.currentFdpServices, &specdiff.targetFdpServices,
 		&specdiff.fdpServiceDiff)
+}
+func diffFdpUIServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
+	auxDiffServices(current, target,
+		&specdiff.currentFdpUIServices, &specdiff.targetFdpUIServices,
+		&specdiff.fdpUIServiceDiff)
 }
 func diffMeshControllerServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,

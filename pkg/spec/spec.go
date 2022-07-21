@@ -99,6 +99,7 @@ type ClusterSpec struct {
 	Hepa           diceyml.Object `json:"hepa"`
 	SpotMonitor    diceyml.Object `json:"spotMonitor"`
 	Fdp            diceyml.Object `json:"fdp"`
+	FdpUI          diceyml.Object `json:"fdpUI"`
 	MeshController diceyml.Object `json:"meshController"`
 }
 type ClusterStatus struct {

@@ -14,7 +14,7 @@
 GO_PROJECT_ROOT := github.com/erda-project/erda
 
 ifeq ($(GO_PROXY_ENV),)
-	GO_PROXY := "https://proxy.golang.org,direct"
+	GO_PROXY := "https://goproxy.cn,direct"
 else
 	GO_PROXY := $(GO_PROXY_ENV)
 endif
@@ -30,7 +30,7 @@ TARGETS_DIR := dice-operator
 IMAGE_PREFIX ?= $(strip )
 IMAGE_SUFFIX ?= $(strip )
 
-IMAGE_TAG ?= "$(shell cat VERSION)-$(shell date -u +%Y%m%d)-$(shell git rev-parse --short HEAD --dirty)"
+IMAGE_TAG ?= "$(shell cat VERSION)-$(shell date '+%Y%m%d%H%M%S')-$(shell git rev-parse --short HEAD --dirty)"
 DOCKER_LABELS ?= git-describe="$(IMAGE_TAG)"
 
 GO_OPTIONS ?= -mod=vendor -count=1
