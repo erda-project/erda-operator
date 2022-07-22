@@ -208,7 +208,7 @@ func GenIngServiceDepEndsOnMap(clusterInfo map[string]string, cluster *spec.Dice
 			"COLLECTOR_PUBLIC_ADDR": collectorPublicAddr,
 			"COLLECTOR_PUBLIC_URL":  collectorPublicURL,
 		},
-		"openapi": {
+		"erda-server": {
 			"OPENAPI_PUBLIC_ADDR": openapiPublicAddr,
 			"OPENAPI_PUBLIC_URL":  openapiPublicURL,
 		},
@@ -301,7 +301,7 @@ func promoteUpdatetxtEnvs(svc *diceyml.Service) {
 
 func injectByDependsOn(svcname string, svc *diceyml.Service,
 	dependonMap map[string]map[string]string) {
-	dependsOn := append(svc.DependsOn, "gittar", "uc", "collector", "openapi", "ui", "soldier", "netportal", "cluster-dialer")
+	dependsOn := append(svc.DependsOn, "gittar", "uc", "collector", "erda-server", "ui", "soldier", "netportal", "cluster-dialer")
 	for _, dependon := range dependsOn {
 		r, ok := dependonMap[dependon]
 		if !ok {
@@ -351,7 +351,7 @@ func GenDiceSvcENVs(cluster *spec.DiceCluster, addonConfigMap,
 	resultEnvs := map[string]map[string]string{
 		"addons":      addonConfigMap,
 		"clusterInfo": clusterInfo,
-		"openapi": {
+		"erda-server": {
 			"COOKIE_DOMAIN":      fmt.Sprintf(".%s", cookieDomain),
 			"CSRF_COOKIE_DOMAIN": fmt.Sprintf(".%s", cookieDomain),
 		},
