@@ -196,7 +196,7 @@ func annotations(dicesvcname string) map[string]string {
 	}
 
 	switch dicesvcname {
-	case "gittar", "openapi", "ui":
+	case "gittar", "erda-server", "ui":
 		annotation["nginx.ingress.kubernetes.io/proxy-body-size"] = "0"
 	default:
 	}
