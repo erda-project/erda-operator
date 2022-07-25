@@ -32,6 +32,8 @@ const (
 	ErdaCustomRegCredSecret  = "aliyun-registry"
 	Pipeline                 = "pipeline"
 	Orchestrator             = "orchestrator"
+	OpenAPI                  = "openapi"
+	ErdaServer               = "erda-server"
 )
 
 func GetAllServices(cluster *spec.DiceCluster) []diceyml.Services {
@@ -230,10 +232,8 @@ func GenIngServiceDepEndsOnMap(clusterInfo map[string]string, cluster *spec.Dice
 	}
 }
 
-func GenServiceAddr(svcName string, svc *diceyml.Service) (string, string) {
-	addrKey := strings.ReplaceAll(svcName, "-", "_")
-	addrKey = strings.ToUpper(addrKey)
-	addrKey = fmt.Sprintf("%s_ADDR", addrKey)
+func GenServiceAddr(svcName string, svc *diceyml.Service) map[string]string {
+	addrKeyTmpl := "%s.%s.svc.cluster.local:%d"
 
 	defaultPort := svc.Ports[0].Port
 	for _, svcPort := range svc.Ports {
@@ -245,8 +245,29 @@ func GenServiceAddr(svcName string, svc *diceyml.Service) (string, string) {
 	if os.Getenv(EnableSpecifiedNamespace) != "" {
 		namespace = os.Getenv(EnableSpecifiedNamespace)
 	}
-	return addrKey, fmt.Sprintf("%s.%s.svc.cluster.local:%d",
-		svcName, namespace, defaultPort)
+
+	result := map[string]string{
+		convertServiceAddrKey(svcName): fmt.Sprintf(addrKeyTmpl, svcName, namespace, defaultPort),
+	}
+
+	switch svcName {
+	case ErdaServer:
+		for _, p := range svc.Ports {
+			if !p.Expose {
+				continue
+			}
+			result[convertServiceAddrKey(OpenAPI)] = fmt.Sprintf(addrKeyTmpl, ErdaServer, namespace, p.Port)
+		}
+	}
+
+	return result
+}
+
+func convertServiceAddrKey(name string) string {
+	addrNameTmpl := "%s_ADDR"
+	addrKey := strings.ReplaceAll(name, "-", "_")
+	addrKey = strings.ToUpper(addrKey)
+	return fmt.Sprintf(addrNameTmpl, addrKey)
 }
 
 func UpdateDependEnvMap(envs map[string]map[string]string, services diceyml.Services) {
@@ -271,8 +292,10 @@ func UpdateDependEnvMap(envs map[string]map[string]string, services diceyml.Serv
 		}
 
 		// 生成 dice 相关组件 addr
-		addKey, addr := GenServiceAddr(name, svc)
-		envs[name][addKey] = addr
+		addrs := GenServiceAddr(name, svc)
+		for k, v := range addrs {
+			envs[name][k] = v
+		}
 	}
 }
 
