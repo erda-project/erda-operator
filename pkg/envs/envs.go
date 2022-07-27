@@ -344,13 +344,10 @@ func injectByDependsOn(svcname string, svc *diceyml.Service,
 	for k, v := range dependonMap[svcname] {
 		if strutil.HasSuffixes(k, "_PUBLIC_ADDR") {
 			svc.Envs["SELF_PUBLIC_ADDR"] = v
-		} else if strutil.HasSuffixes(k, "_ADDR") {
-			svc.Envs["SELF_ADDR"] = v
 		} else if strutil.HasSuffixes(k, "_PUBLIC_URL") {
 			svc.Envs["SELF_PUBLIC_URL"] = v
 		}
 	}
-	return
 }
 
 func GenDiceSvcENVs(cluster *spec.DiceCluster, addonConfigMap,

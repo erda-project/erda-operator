@@ -483,6 +483,25 @@ func Envs(dicesvcname string, dicesvc *diceyml.Service, clus *spec.DiceCluster) 
 	for k, v := range dicesvc.Envs {
 		r = append(r, corev1.EnvVar{Name: k, Value: v})
 	}
+
+	if _, ok := dicesvc.Envs["SELF_ADDR"]; !ok && len(dicesvc.Ports) > 0 {
+		defaultPort := dicesvc.Ports[0].Port
+		for _, svcPort := range dicesvc.Ports {
+			if svcPort.Default {
+				defaultPort = svcPort.Port
+			}
+		}
+		var namespace = metav1.NamespaceDefault
+		if os.Getenv(EnableSpecifiedNamespace) != "" {
+			namespace = os.Getenv(EnableSpecifiedNamespace)
+		}
+
+		r = append(r, corev1.EnvVar{
+			Name:  "SELF_ADDR",
+			Value: fmt.Sprintf("%s.%s.svc.cluster.local:%d", dicesvcname, namespace, defaultPort),
+		})
+	}
+
 	r = append(r, corev1.EnvVar{Name: "DICE_COMPONENT", Value: dicesvcname})
 	// 跟 DICE_CLUSTER_NAME 相同, 一些组件目前还是用的这个 env
 	r = append(r, corev1.EnvVar{Name: "DICE_CLUSTER", ValueFrom: &corev1.EnvVarSource{
@@ -546,23 +565,6 @@ func Envs(dicesvcname string, dicesvc *diceyml.Service, clus *spec.DiceCluster) 
 			},
 		},
 	})
-	if len(dicesvc.Ports) > 0 {
-		defaultPort := dicesvc.Ports[0].Port
-		for _, svcPort := range dicesvc.Ports {
-			if svcPort.Default {
-				defaultPort = svcPort.Port
-			}
-		}
-		var namespace = metav1.NamespaceDefault
-		if os.Getenv(EnableSpecifiedNamespace) != "" {
-			namespace = os.Getenv(EnableSpecifiedNamespace)
-		}
-
-		r = append(r, corev1.EnvVar{
-			Name:  "SELF_ADDR",
-			Value: fmt.Sprintf("%s.%s.svc.cluster.local:%d", dicesvcname, namespace, defaultPort),
-		})
-	}
 
 	r = append(r, corev1.EnvVar{
 		Name:  "DICE_CPU_ORIGIN",
