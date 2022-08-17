@@ -322,9 +322,8 @@ func promoteUpdatetxtEnvs(svc *diceyml.Service) {
 	}
 }
 
-func injectByDependsOn(svcname string, svc *diceyml.Service,
-	dependonMap map[string]map[string]string) {
-	dependsOn := append(svc.DependsOn, "gittar", "uc", "collector", "erda-server", "ui", "soldier", "netportal", "cluster-dialer")
+func injectByDependsOn(svcname string, svc *diceyml.Service, dependonMap map[string]map[string]string) {
+	dependsOn := append(svc.DependsOn, "gittar", "uc", "collector", "erda-server", "ui", "cluster-dialer")
 	for _, dependon := range dependsOn {
 		r, ok := dependonMap[dependon]
 		if !ok {
@@ -335,7 +334,9 @@ func injectByDependsOn(svcname string, svc *diceyml.Service,
 			svc.Envs = map[string]string{}
 		}
 		for k, v := range r {
-			svc.Envs[k] = v
+			if _, ok := svc.Envs[k]; !ok {
+				svc.Envs[k] = v
+			}
 		}
 	}
 	if svc.Envs == nil {
