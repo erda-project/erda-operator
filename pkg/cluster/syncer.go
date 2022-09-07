@@ -16,10 +16,12 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	vpa_clientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -27,26 +29,30 @@ import (
 	"github.com/erda-project/dice-operator/pkg/cluster/daemonset"
 	"github.com/erda-project/dice-operator/pkg/cluster/deployment"
 	"github.com/erda-project/dice-operator/pkg/cluster/diff"
+	"github.com/erda-project/dice-operator/pkg/cluster/hpa"
 	"github.com/erda-project/dice-operator/pkg/cluster/launch"
 	"github.com/erda-project/dice-operator/pkg/cluster/status"
+	"github.com/erda-project/dice-operator/pkg/cluster/vpa"
 	"github.com/erda-project/dice-operator/pkg/spec"
 	statusop "github.com/erda-project/dice-operator/pkg/status"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 )
 
 type Syncer struct {
-	target     *spec.DiceCluster
-	k8sclient  kubernetes.Interface
-	restclient rest.Interface
-	clus       *Cluster
+	target       *spec.DiceCluster
+	k8sclient    kubernetes.Interface
+	restclient   rest.Interface
+	clientconfig *rest.Config
+	clus         *Cluster
 }
 
 func NewSyncer(clus *Cluster) *Syncer {
 	return &Syncer{
-		target:     clus.target,
-		k8sclient:  clus.k8sclient,
-		restclient: clus.client,
-		clus:       clus,
+		target:       clus.target,
+		k8sclient:    clus.k8sclient,
+		restclient:   clus.client,
+		clientconfig: clus.clientconfig,
+		clus:         clus,
 	}
 }
 
@@ -59,6 +65,7 @@ func sprintMapKeys(m map[string]*diceyml.Service) string {
 }
 
 func (c *Syncer) Sync() {
+	vpaClientset := vpa_clientset.NewForConfigOrDie(c.clientconfig)
 	actions := diff.NewSpecDiff(nil, c.target).GetActions()
 	deployments := actions.AddedServices
 
@@ -83,17 +90,24 @@ func (c *Syncer) Sync() {
 			sprintMapKeys(deployNeedToUpdate), sprintMapKeys(deployNeedToAdd), sprintMapKeys(deployNeedToDelete))
 	}
 
+	needPAs := c.checkPodAutoscalers(deployments, daemonsets, vpaClientset)
+	if len(needPAs) > 0 {
+		logrus.Infof("sync pod autoscalers: %v", sprintMapKeys(needPAs))
+	}
+
 	syncactions := diff.Actions{
-		AddedServices:    deployNeedToAdd,
-		UpdatedServices:  deployNeedToUpdate,
-		DeletedServices:  deployNeedToDelete,
-		AddedDaemonSet:   dsNeedToAdd,
-		UpdatedDaemonSet: dsNeedToUpdate,
-		DeletedDaemonSet: dsNeedToDelete,
+		AddedServices:       deployNeedToAdd,
+		UpdatedServices:     deployNeedToUpdate,
+		DeletedServices:     deployNeedToDelete,
+		AddedDaemonSet:      dsNeedToAdd,
+		UpdatedDaemonSet:    dsNeedToUpdate,
+		DeletedDaemonSet:    dsNeedToDelete,
+		UpdatedServicesPA:   needPAs,
+		EnableAutoScaleDiff: actions.EnableAutoScaleDiff,
 	}
 
 	launcher := launch.NewLauncher(&syncactions,
-		c.target, c.clus.ownerRefs, c.k8sclient, c.restclient, c.target.Status.Phase)
+		c.target, c.clus.ownerRefs, c.k8sclient, vpaClientset, c.restclient, c.target.Status.Phase, c.clus.serviceToPA)
 	if err := launcher.Launch(); err != nil {
 		logrus.Printf("launch failed when sync, err: %s", err)
 	}
@@ -212,6 +226,77 @@ func (c *Syncer) checkDaemonsets(dicesvcs map[string]*diceyml.Service) (
 	}
 
 	return
+}
+
+func (c *Syncer) checkPodAutoscalers(deployments, daemonsets map[string]*diceyml.Service, vpaClientSet *vpa_clientset.Clientset) (
+	needToPA map[string]*diceyml.Service) {
+
+	needToPA = make(map[string]*diceyml.Service)
+
+	vpaList, err := vpa.ListHPAInNamespace(vpaClientSet, c.target)
+	if err != nil {
+		logrus.Errorf("list vpa in namespace %s error: %v", c.target.Namespace, err)
+		return needToPA
+	}
+
+	hpaList, err := hpa.ListHPAInNamespace(c.k8sclient, c.target)
+	if err != nil {
+		logrus.Errorf("list vpa in namespace %s error: %v", c.target.Namespace, err)
+		return needToPA
+	}
+
+	if c.target.Spec.EnableAutoScale {
+		for svcName, diceSvc := range deployments {
+			if _, ok := c.clus.serviceToPA[svcName]; ok {
+				needToPA[svcName] = diceSvc
+			}
+		}
+		for svcName, diceSvc := range daemonsets {
+			if _, ok := c.clus.serviceToPA[svcName]; ok {
+				needToPA[svcName] = diceSvc
+			}
+		}
+
+		for _, hpa := range hpaList.Items {
+			svcName := strings.SplitN(hpa.Name, "-", 2)[1]
+			if _, ok := needToPA[svcName]; ok {
+				delete(needToPA, svcName)
+			}
+		}
+
+		for _, vpa := range vpaList.Items {
+			svcName := strings.SplitN(vpa.Name, "-", 2)[1]
+			if _, ok := needToPA[svcName]; ok {
+				delete(needToPA, svcName)
+			}
+		}
+	} else {
+		for _, hpa := range hpaList.Items {
+			svcName := strings.SplitN(hpa.Name, "-", 2)[1]
+			if _, ok := deployments[svcName]; ok {
+				needToPA[svcName] = deployments[svcName]
+				continue
+			}
+			if _, ok := daemonsets[svcName]; ok {
+				needToPA[svcName] = daemonsets[svcName]
+				continue
+			}
+		}
+
+		for _, vpa := range vpaList.Items {
+			svcName := strings.SplitN(vpa.Name, "-", 2)[1]
+			if _, ok := deployments[svcName]; ok {
+				needToPA[svcName] = deployments[svcName]
+				continue
+			}
+			if _, ok := daemonsets[svcName]; ok {
+				needToPA[svcName] = daemonsets[svcName]
+				continue
+			}
+		}
+	}
+
+	return needToPA
 }
 
 func (c *Syncer) syncComponentStatus(componentStatus map[string]spec.ComponentStatus) {

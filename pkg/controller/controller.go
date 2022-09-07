@@ -178,7 +178,7 @@ func (c *Controller) initDiceClusters() (string, error) {
 		if os.Getenv(ErdaClusterInfoConfigMapEnv) != "" {
 			clus.Spec.ClusterinfoConfigMap = os.Getenv(ErdaClusterInfoConfigMapEnv)
 		}
-		dc, err := cluster.New(&clus, c.client, c.k8sclient)
+		dc, err := cluster.New(&clus, c.client, c.k8sclient, c.clientconfig)
 		if err != nil {
 			return "", err
 		}

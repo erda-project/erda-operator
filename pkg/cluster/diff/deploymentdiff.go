@@ -48,9 +48,10 @@ func NewDeploymentListDiff(current, target []appsv1.Deployment) *DeploymentListD
 }
 
 type DeploymentListActions struct {
-	AddedDeployments   map[string]appsv1.Deployment
-	UpdatedDeployments map[string]appsv1.Deployment
-	DeletedDeployments map[string]appsv1.Deployment
+	AddedDeployments        map[string]appsv1.Deployment
+	UpdatedDeployments      map[string]appsv1.Deployment
+	DeletedDeployments      map[string]appsv1.Deployment
+	UpdatedDeploymentsForPA map[string]appsv1.Deployment
 }
 
 func (a *DeploymentListActions) String() string {
@@ -74,6 +75,8 @@ func (d *DeploymentListDiff) GetActions() *DeploymentListActions {
 	missingInSet1, missingInSet2, shared := diffDeploySet(d.currentDeployments, d.targetDeployments)
 	r.AddedDeployments = missingInSet1
 	r.DeletedDeployments = missingInSet2
+	// For change on turn on/off pod autoscaler, need create or delete pod autoscaler object, so take all deployments as need update to trigger create/delete pod autoscaler action
+	r.UpdatedDeploymentsForPA = shared
 	r.UpdatedDeployments = getNotEqualDeployments(d.currentDeployments, d.targetDeployments, shared)
 	return r
 }
@@ -100,7 +103,7 @@ func diffDeploySet(set1, set2 map[string]appsv1.Deployment) (
 	return
 }
 
-func isDeploymentEqual(deploy1, deploy2 appsv1.Deployment) bool {
+func IsDeploymentEqual(deploy1, deploy2 appsv1.Deployment) bool {
 	a1, a2 := getDiceAnnotations(deploy1.Annotations, deploy2.Annotations)
 	if !isAnnotationsEqual(a1, a2) {
 		logrus.Infof("diff annotations, %s/%s: %v -> %v", deploy1.Namespace, deploy2.Name, a1, a2)
@@ -213,7 +216,7 @@ func isEnvsEqual(envs1, envs2 []corev1.EnvVar, location string) bool {
 func getNotEqualDeployments(set1, set2, shared map[string]appsv1.Deployment) map[string]appsv1.Deployment {
 	r := map[string]appsv1.Deployment{}
 	for k := range shared {
-		if !isDeploymentEqual(set1[k], set2[k]) {
+		if !IsDeploymentEqual(set1[k], set2[k]) {
 			r[k] = set2[k]
 		}
 	}

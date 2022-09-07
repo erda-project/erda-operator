@@ -47,6 +47,16 @@ const (
 	ClusterSizeProd ClusterSize = "prod"
 )
 
+const(
+	PANameHPA = "HPA"
+	PANameVPA = "VPA"
+)
+
+type PATarget struct{
+	PAKind                string
+	TargetControllerKind  string
+}
+
 type DiceClusterList struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -62,6 +72,7 @@ type DiceCluster struct {
 
 type ClusterSpec struct {
 	ResetStatus          bool        `json:"resetStatus"`
+	EnableAutoScale      bool        `json:"enableAutoScale"`
 	AddonConfigMap       string      `json:"addonConfigMap"`
 	ClusterinfoConfigMap string      `json:"clusterinfoConfigMap"`
 	PlatformDomain       string      `json:"platformDomain"`

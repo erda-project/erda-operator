@@ -15,10 +15,13 @@ package cluster
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	vpa_clientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -33,10 +36,13 @@ import (
 )
 
 type Cluster struct {
-	namespace string
-	target    *spec.DiceCluster
-	client    rest.Interface
-	k8sclient kubernetes.Interface
+	namespace    string
+	target       *spec.DiceCluster
+	client       rest.Interface
+	k8sclient    kubernetes.Interface
+	clientconfig *rest.Config
+
+	serviceToPA map[string]spec.PATarget
 
 	ownerRefs []metav1.OwnerReference
 
@@ -44,15 +50,64 @@ type Cluster struct {
 	updateCh chan spec.DiceCluster
 }
 
-func New(specdc *spec.DiceCluster, client rest.Interface, k8sclient kubernetes.Interface) (*Cluster, error) {
+const (
+	PATargetControllerKindDeployment  = "Deployment"
+	PATargetControllerKindDaemonSet   = "DaemonSet"
+	PATargetControllerKindStatefulSet = "StatefulSet"
+
+	HPADeploymentAnalyzerMetricsTask = "analyzer-metrics-task"
+	HPADeploymentAnalyzerTracingTask = "analyzer-tracing-task"
+	HPADeploymentClusterAgent        = "cluster-agent"
+	HPADeploymentClusterManager      = "cluster-manager"
+	HPADeploymentCMP                 = "cmp"
+	HPADeploymentCollector           = "collector"
+	HPADeploymentDOP                 = "dop"
+	HPADeploymentEnterpriseUI        = "enterprise-ui"
+	HPADeploymentErdaServer          = "erda-server"
+	HPADeploymentHepa                = "hepa"
+	HPADeploymentMonitor             = "monitor"
+	HPADeploymentMSP                 = "msp"
+	HPADeploymentLogService          = "log-service"
+	HPADeploymentOrchestrator        = "orchestrator"
+	HPADeploymentPipeline            = "pipeline"
+	HPADeploymentStreaming           = "streaming"
+	HPADeploymentUC                  = "uc"
+	HPADeploymentUCAdaptor           = "uc-adaptor"
+	HPADeploymentUI                  = "ui"
+
+	VPADeploymentAnalyzerAlert            = "analyzer-alert"
+	VPADeploymentAnalyzerAlertTask        = "analyzer-alert-task"
+	VPADeploymentAnalyzerErrorInsight     = "analyzer-error-insight"
+	VPADeploymentAnalyzerErrorInsightTask = "analyzer-error-insight-task"
+	VPADeploymentAnalyzerMetrics          = "analyzer-metrics"
+	VPADeploymentAnalyzerTracing          = "analyzer-tracing"
+	VPADeploymentGittar                   = "gittar"
+	VPADeploymentMonitorAgentInjector     = "monitor-agent-injector"
+	VPADeploymentTelegrafPlatform         = "telegraf-platform"
+
+	VPADaemonSetTelegraf          = "telegraf"
+	VPADaemonSetTelegrafApp       = "telegraf-app"
+	VPADaemonSetFluentBit         = "fluent-bit"
+	VPADaemonSetVolumeProvisioner = "volume-provisioner"
+	VPADaemonSetTelegrafEdge      = "telegraf-edge"
+	VPADaemonSetTelegrafAppEdge   = "telegraf-app-edge"
+
+	UnNeedPAServiceClusterAgent = "cluster-agent"
+
+	EnvErdaPAComponentList = "ERDA_PA_COMPONENT_LIST"
+)
+
+func New(specdc *spec.DiceCluster, client rest.Interface, k8sclient kubernetes.Interface, clientconfig *rest.Config) (*Cluster, error) {
 	logrus.Infof("starting dice cluster: %s/%s", specdc.Namespace, specdc.Name)
 	c := &Cluster{
-		target:    specdc,
-		client:    client,
-		k8sclient: k8sclient,
-		ownerRefs: buildOwnerRefs(specdc),
-		stopCh:    make(chan struct{}, 1),
-		updateCh:  make(chan spec.DiceCluster, 10),
+		target:       specdc,
+		client:       client,
+		k8sclient:    k8sclient,
+		clientconfig: clientconfig,
+		serviceToPA:  initServiceNameToPA(),
+		ownerRefs:    buildOwnerRefs(specdc),
+		stopCh:       make(chan struct{}, 1),
+		updateCh:     make(chan spec.DiceCluster, 10),
 	}
 	// replace all built-in envs
 	if err := injectEnvs(k8sclient, specdc); err != nil {
@@ -98,7 +153,8 @@ func (c *Cluster) create() error {
 	}
 	statusop.UpdateComponentStatus(c.client, c.target.Namespace, c.target.Name, allsvc)
 
-	launcher := launch.NewLauncher(actions, c.target, c.ownerRefs, c.k8sclient, c.client, spec.ClusterPhaseCreating)
+	vpaClientset := vpa_clientset.NewForConfigOrDie(c.clientconfig)
+	launcher := launch.NewLauncher(actions, c.target, c.ownerRefs, c.k8sclient, vpaClientset, c.client, spec.ClusterPhaseCreating, c.serviceToPA)
 	if err := launcher.Launch(); err != nil {
 		// error or pending status already updated in Launch()
 		return nil
@@ -143,6 +199,8 @@ func (c *Cluster) PeriodicSync() {
 			return
 		case newspec := <-c.updateCh:
 			c.update(newspec)
+			syncer := NewSyncer(c)
+			syncer.Sync()
 		case <-time.After(15 * time.Second):
 			if c.target.Status.Phase != spec.ClusterPhaseRunning &&
 				c.target.Status.Phase != spec.ClusterPhasePending &&
@@ -195,4 +253,80 @@ func resetStatus(c *Cluster) {
 		return
 	}
 	statusop.RevertResetStatus(c.client, c.target.Namespace, c.target.Name)
+}
+
+func initServiceNameToPA() map[string]spec.PATarget {
+	serviceNameToPA := make(map[string]spec.PATarget)
+	paList := os.Getenv(EnvErdaPAComponentList)
+
+	deploymentHPA := []string{HPADeploymentAnalyzerMetricsTask, HPADeploymentAnalyzerTracingTask, HPADeploymentClusterManager,
+		HPADeploymentLogService, HPADeploymentCMP, HPADeploymentCollector, HPADeploymentDOP, HPADeploymentEnterpriseUI, HPADeploymentErdaServer,
+		HPADeploymentOrchestrator, HPADeploymentHepa, HPADeploymentMonitor, HPADeploymentMSP, HPADeploymentPipeline, HPADeploymentStreaming,
+		HPADeploymentUC, HPADeploymentUCAdaptor, HPADeploymentUI}
+	deploymentVPA := []string{VPADeploymentAnalyzerAlert, VPADeploymentAnalyzerAlertTask, VPADeploymentAnalyzerErrorInsight,
+		VPADeploymentAnalyzerErrorInsightTask, VPADeploymentAnalyzerMetrics, VPADeploymentAnalyzerTracing, VPADeploymentGittar,
+		VPADeploymentMonitorAgentInjector, VPADeploymentTelegrafPlatform}
+	daemonsetVPA := []string{VPADaemonSetTelegraf, VPADaemonSetTelegrafApp, VPADaemonSetFluentBit, VPADaemonSetVolumeProvisioner,
+		VPADaemonSetTelegrafEdge, VPADaemonSetTelegrafAppEdge}
+
+	if paList != "" {
+		for _, svcName := range strings.Split(paList, ",") {
+			if isInStringSlice(svcName, deploymentHPA) {
+				serviceNameToPA[svcName] = spec.PATarget{
+					PAKind:               spec.PANameHPA,
+					TargetControllerKind: PATargetControllerKindDeployment,
+				}
+				continue
+			}
+
+			if isInStringSlice(svcName, deploymentVPA) {
+				serviceNameToPA[svcName] = spec.PATarget{
+					PAKind:               spec.PANameVPA,
+					TargetControllerKind: PATargetControllerKindDeployment,
+				}
+				continue
+			}
+
+			if isInStringSlice(svcName, daemonsetVPA) {
+				serviceNameToPA[svcName] = spec.PATarget{
+					PAKind:               spec.PANameVPA,
+					TargetControllerKind: PATargetControllerKindDaemonSet,
+				}
+				continue
+			}
+			logrus.Errorf("Service %s not found in Known services, or not need pod autoscaler for it", svcName)
+		}
+	} else {
+		for _, svcName := range deploymentHPA {
+			serviceNameToPA[svcName] = spec.PATarget{
+				PAKind:               spec.PANameHPA,
+				TargetControllerKind: PATargetControllerKindDeployment,
+			}
+		}
+
+		for _, svcName := range deploymentVPA {
+			serviceNameToPA[svcName] = spec.PATarget{
+				PAKind:               spec.PANameVPA,
+				TargetControllerKind: PATargetControllerKindDeployment,
+			}
+		}
+
+		for _, svcName := range daemonsetVPA {
+			serviceNameToPA[svcName] = spec.PATarget{
+				PAKind:               spec.PANameVPA,
+				TargetControllerKind: PATargetControllerKindDaemonSet,
+			}
+		}
+	}
+
+	return serviceNameToPA
+}
+
+func isInStringSlice(target string, targetSlice []string) bool {
+	for _, name := range targetSlice {
+		if name == target {
+			return true
+		}
+	}
+	return false
 }

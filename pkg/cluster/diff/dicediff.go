@@ -20,9 +20,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/erda-project/dice-operator/pkg/spec"
+	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
-	"github.com/erda-project/dice-operator/pkg/utils"
 )
 
 const (
@@ -46,6 +46,9 @@ const (
 )
 
 type SpecDiff struct {
+	enableAutoScaleDiff      bool
+	currentEnableAutoScale   bool
+	targetEnableAutoScale   bool
 	// spec.Dice
 	diceGlobalEnvDiff    bool
 	currentDiceGlobalEnv map[string]string
@@ -225,6 +228,9 @@ type Actions struct {
 	AddedDaemonSet   map[string]*diceyml.Service
 	UpdatedDaemonSet map[string]*diceyml.Service
 	DeletedDaemonSet map[string]*diceyml.Service
+
+	UpdatedServicesPA map[string]*diceyml.Service
+	EnableAutoScaleDiff bool
 }
 
 func (a *Actions) EmptyAction() bool {
@@ -233,7 +239,8 @@ func (a *Actions) EmptyAction() bool {
 		len(a.DeletedServices) == 0 &&
 		len(a.AddedDaemonSet) == 0 &&
 		len(a.UpdatedDaemonSet) == 0 &&
-		len(a.DeletedDaemonSet) == 0
+		len(a.DeletedDaemonSet) == 0 &&
+		len(a.UpdatedServicesPA) == 0
 }
 
 func (a *Actions) String() string {
@@ -354,6 +361,9 @@ func NewSpecDiff(current, target *spec.DiceCluster) *SpecDiff {
 		}
 		return &r
 	}
+	if current.Spec.EnableAutoScale !=  target.Spec.EnableAutoScale {
+		r.enableAutoScaleDiff = true
+	}
 	diffDice(*diceyml.CopyObj(&current.Spec.Dice), *diceyml.CopyObj(&target.Spec.Dice), &r)
 	diffAddonPlatform(*diceyml.CopyObj(&current.Spec.AddonPlatform), *diceyml.CopyObj(&target.Spec.AddonPlatform), &r)
 	diffGittar(*diceyml.CopyObj(&current.Spec.Gittar), *diceyml.CopyObj(&target.Spec.Gittar), &r)
@@ -456,16 +466,31 @@ func (d *SpecDiff) filterEdgeClusterServices() {
 
 func (d *SpecDiff) GetActions() *Actions {
 	r := &Actions{
-		AddedServices:    make(map[string]*diceyml.Service),
-		UpdatedServices:  make(map[string]*diceyml.Service),
-		DeletedServices:  make(map[string]*diceyml.Service),
-		AddedDaemonSet:   make(map[string]*diceyml.Service),
-		UpdatedDaemonSet: make(map[string]*diceyml.Service),
-		DeletedDaemonSet: make(map[string]*diceyml.Service),
+		AddedServices:     make(map[string]*diceyml.Service),
+		UpdatedServices:   make(map[string]*diceyml.Service),
+		DeletedServices:   make(map[string]*diceyml.Service),
+		AddedDaemonSet:    make(map[string]*diceyml.Service),
+		UpdatedDaemonSet:  make(map[string]*diceyml.Service),
+		DeletedDaemonSet:  make(map[string]*diceyml.Service),
+		UpdatedServicesPA: make(map[string]*diceyml.Service),
+		EnableAutoScaleDiff:  d.enableAutoScaleDiff,
 	}
+
+	differentServices :=  make(map[string]*diceyml.Service)
+
 	// spec.dice
 	missingInSet1, missingInSet2, shared := diffServiceset(d.currentDiceServices, d.targetDiceServices)
-	differentServices := getDifferentServices(d.currentDiceServices, d.targetDiceServices, shared)
+	/*
+		if d.enableAutoScaleDiff {
+			differentServices = shared
+		} else {
+			differentServices = getDifferentServices(d.currentDiceServices, d.targetDiceServices, shared)
+		}
+	*/
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
+	differentServices = getDifferentServices(d.currentDiceServices, d.targetDiceServices, shared)
 	expandGlobalEnv(d.targetDiceGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetDiceGlobalEnv, missingInSet2)
 	expandGlobalEnv(d.targetDiceGlobalEnv, shared)
@@ -479,6 +504,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.addonplatform
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentAddonPlatformServices, d.targetAddonPlatformServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentAddonPlatformServices, d.targetAddonPlatformServices, shared)
 	expandGlobalEnv(d.targetAddonPlatformGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetAddonPlatformGlobalEnv, missingInSet2)
@@ -493,6 +521,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.gittar
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentGittarServices, d.targetGittarServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentGittarServices, d.targetGittarServices, shared)
 	expandGlobalEnv(d.targetGittarGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetGittarGlobalEnv, missingInSet2)
@@ -507,6 +538,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.pandora
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentPandoraServices, d.targetPandoraServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentPandoraServices, d.targetPandoraServices, shared)
 	expandGlobalEnv(d.targetPandoraGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetPandoraGlobalEnv, missingInSet2)
@@ -521,6 +555,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.diceui
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentDiceUIServices, d.targetDiceUIServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentDiceUIServices, d.targetDiceUIServices, shared)
 	expandGlobalEnv(d.targetDiceUIGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetDiceUIGlobalEnv, missingInSet2)
@@ -535,6 +572,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.uc
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentUCServices, d.targetUCServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentUCServices, d.targetUCServices, shared)
 	expandGlobalEnv(d.targetUCGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetUCGlobalEnv, missingInSet2)
@@ -550,6 +590,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.spotAnalyzer
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotAnalyzerServices, d.targetSpotAnalyzerServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentSpotAnalyzerServices, d.targetSpotAnalyzerServices, shared)
 	expandGlobalEnv(d.targetSpotAnalyzerGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetSpotAnalyzerGlobalEnv, missingInSet2)
@@ -565,6 +608,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.spotCollector
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotCollectorServices, d.targetSpotCollectorServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentSpotCollectorServices, d.targetSpotCollectorServices, shared)
 	expandGlobalEnv(d.targetSpotCollectorGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetSpotCollectorGlobalEnv, missingInSet2)
@@ -580,6 +626,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.spotDashboard
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotDashboardServices, d.targetSpotDashboardServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentSpotDashboardServices, d.targetSpotDashboardServices, shared)
 	expandGlobalEnv(d.targetSpotDashboardGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetSpotDashboardGlobalEnv, missingInSet2)
@@ -595,6 +644,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.fluentBit
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentFluentBitServices, d.targetFluentBitServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentFluentBitServices, d.targetFluentBitServices, shared)
 	expandGlobalEnv(d.targetFluentBitGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetFluentBitGlobalEnv, missingInSet2)
@@ -610,6 +662,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.spotFilebeat (Daemonset)
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotFilebeatServices, d.targetSpotFilebeatServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentSpotFilebeatServices, d.targetSpotFilebeatServices, shared)
 	expandGlobalEnv(d.targetSpotFilebeatGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetSpotFilebeatGlobalEnv, missingInSet2)
@@ -625,6 +680,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.spotStatus
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotStatusServices, d.targetSpotStatusServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentSpotStatusServices, d.targetSpotStatusServices, shared)
 	expandGlobalEnv(d.targetSpotStatusGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetSpotStatusGlobalEnv, missingInSet2)
@@ -640,6 +698,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.spotTelegraf (telegraf: daemonset, telegraf-platform: deployment)
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotTelegrafServices, d.targetSpotTelegrafServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentSpotTelegrafServices, d.targetSpotTelegrafServices, shared)
 	expandGlobalEnv(d.targetSpotTelegrafGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetSpotTelegrafGlobalEnv, missingInSet2)
@@ -672,6 +733,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.tmc
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentTmcServices, d.targetTmcServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentTmcServices, d.targetTmcServices, shared)
 	expandGlobalEnv(d.targetTmcGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetTmcGlobalEnv, missingInSet2)
@@ -687,6 +751,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.hepa
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentHepaServices, d.targetHepaServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentHepaServices, d.targetHepaServices, shared)
 	expandGlobalEnv(d.targetHepaGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetHepaGlobalEnv, missingInSet2)
@@ -701,6 +768,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.spotMonitor
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentSpotMonitorServices, d.targetSpotMonitorServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentSpotMonitorServices, d.targetSpotMonitorServices, shared)
 	expandGlobalEnv(d.targetSpotMonitorGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetSpotMonitorGlobalEnv, missingInSet2)
@@ -715,6 +785,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.fdp
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentFdpServices, d.targetFdpServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentFdpServices, d.targetFdpServices, shared)
 	expandGlobalEnv(d.targetFdpGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetFdpGlobalEnv, missingInSet2)
@@ -730,6 +803,9 @@ func (d *SpecDiff) GetActions() *Actions {
 
 	// spec.fdpUI
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentFdpUIServices, d.targetFdpUIServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentFdpUIServices, d.targetFdpUIServices, shared)
 	expandGlobalEnv(d.targetFdpUIGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetFdpUIGlobalEnv, missingInSet2)
@@ -744,6 +820,9 @@ func (d *SpecDiff) GetActions() *Actions {
 	}
 	// spec.meshController
 	missingInSet1, missingInSet2, shared = diffServiceset(d.currentMeshControllerServices, d.targetMeshControllerServices)
+	if d.enableAutoScaleDiff{
+		mergemap(r.UpdatedServicesPA, shared)
+	}
 	differentServices = getDifferentServices(d.currentMeshControllerServices, d.targetMeshControllerServices, shared)
 	expandGlobalEnv(d.targetMeshControllerGlobalEnv, missingInSet1)
 	expandGlobalEnv(d.targetMeshControllerGlobalEnv, missingInSet2)
@@ -781,6 +860,7 @@ func (d *SpecDiff) GetActions() *Actions {
 }
 
 func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
+	specdiff.enableAutoScaleDiff = true
 	specdiff.diceGlobalEnvDiff = true
 	specdiff.addonPlatformGlobalEnvDiff = true
 	specdiff.gittarGlobalEnvDiff = true
@@ -821,6 +901,7 @@ func diffFromBlank(target *spec.DiceCluster, specdiff *SpecDiff) {
 	meshController := diceyml.CopyObj(&target.Spec.MeshController)
 	fluentBit := diceyml.CopyObj(&target.Spec.FluentBit)
 
+	specdiff.targetEnableAutoScale = target.Spec.EnableAutoScale
 	specdiff.targetDiceGlobalEnv = dice.Envs
 	specdiff.targetAddonPlatformGlobalEnv = addonplatform.Envs
 	specdiff.targetGittarGlobalEnv = gittar.Envs
@@ -1092,105 +1173,109 @@ func auxDiffGlobalEnv(current, target map[string]string, specCurrent, specTarget
 func diffDiceServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentDiceServices, &specdiff.targetDiceServices,
-		&specdiff.diceServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.diceServiceDiff)
 }
 
 func diffAddonPlatformServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentAddonPlatformServices, &specdiff.targetAddonPlatformServices,
-		&specdiff.addonPlatformServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.addonPlatformServiceDiff)
 }
 
 func diffGittarServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentGittarServices, &specdiff.targetGittarServices,
-		&specdiff.gittarServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.gittarServiceDiff)
 }
 
 func diffPandoraServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentPandoraServices, &specdiff.targetPandoraServices,
-		&specdiff.pandoraServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.pandoraServiceDiff)
 }
 func diffDiceUIServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentDiceUIServices, &specdiff.targetDiceUIServices,
-		&specdiff.diceUIServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.diceUIServiceDiff)
 }
 func diffUCServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentUCServices, &specdiff.targetUCServices,
-		&specdiff.ucServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.ucServiceDiff)
 }
 func diffSpotAnalyzerServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentSpotAnalyzerServices, &specdiff.targetSpotAnalyzerServices,
-		&specdiff.spotAnalyzerServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.spotAnalyzerServiceDiff)
 }
 
 func diffSpotCollectorServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentSpotCollectorServices, &specdiff.targetSpotCollectorServices,
-		&specdiff.spotCollectorServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.spotCollectorServiceDiff)
 }
 func diffSpotDashboardServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentSpotDashboardServices, &specdiff.targetSpotDashboardServices,
-		&specdiff.spotDashboardServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.spotDashboardServiceDiff)
 }
 func diffSpotFilebeatServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentSpotFilebeatServices, &specdiff.targetSpotFilebeatServices,
-		&specdiff.spotFilebeatServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.spotFilebeatServiceDiff)
 }
 func diffSpotStatusServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentSpotStatusServices, &specdiff.targetSpotStatusServices,
-		&specdiff.spotStatusServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.spotStatusServiceDiff)
 }
 func diffSpotTelegrafServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentSpotTelegrafServices, &specdiff.targetSpotTelegrafServices,
-		&specdiff.spotTelegrafServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.spotTelegrafServiceDiff)
 }
 func diffTmcServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentTmcServices, &specdiff.targetTmcServices,
-		&specdiff.tmcServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.tmcServiceDiff)
 }
 func diffHepaServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentHepaServices, &specdiff.targetHepaServices,
-		&specdiff.hepaServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.hepaServiceDiff)
 }
 func diffSpotMonitorServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentSpotMonitorServices, &specdiff.targetSpotMonitorServices,
-		&specdiff.spotMonitorServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.spotMonitorServiceDiff)
 }
 func diffFdpServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentFdpServices, &specdiff.targetFdpServices,
-		&specdiff.fdpServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.fdpServiceDiff)
 }
 func diffFdpUIServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentFdpUIServices, &specdiff.targetFdpUIServices,
-		&specdiff.fdpUIServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.fdpUIServiceDiff)
 }
 func diffMeshControllerServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentMeshControllerServices, &specdiff.targetMeshControllerServices,
-		&specdiff.meshControllerServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.meshControllerServiceDiff)
 }
 
 func diffFluentBitServices(current, target map[string]*diceyml.Service, specdiff *SpecDiff) {
 	auxDiffServices(current, target,
 		&specdiff.currentFluentBitServices, &specdiff.targetFluentBitServices,
-		&specdiff.fluentBitServiceDiff)
+		specdiff.enableAutoScaleDiff, &specdiff.fluentBitServiceDiff)
 }
 
-func auxDiffServices(current, target map[string]*diceyml.Service, specCurrent, specTarget *map[string]*diceyml.Service, diff *bool) {
+func auxDiffServices(current, target map[string]*diceyml.Service, specCurrent, specTarget *map[string]*diceyml.Service, enableAutoScaleDiff bool, diff *bool) {
+	if enableAutoScaleDiff {
+		*diff = true
+	}
+
 	if len(current) != len(target) {
 		*diff = true
 	}

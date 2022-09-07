@@ -22,7 +22,7 @@ import (
 
 func (c *Controller) onAdd(obj interface{}) {
 	spec := obj.(*spec.DiceCluster)
-	clus, err := cluster.New(spec, c.client, c.k8sclient)
+	clus, err := cluster.New(spec, c.client, c.k8sclient, c.clientconfig)
 	if err != nil {
 		logrus.Errorf("Failed to create cluster: %v", err)
 		return

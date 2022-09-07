@@ -28,11 +28,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/erda-project/dice-operator/pkg/cluster/deployment"
+	clusterutils "github.com/erda-project/dice-operator/pkg/cluster/utils"
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
-	clusterutils "github.com/erda-project/dice-operator/pkg/cluster/utils"
 )
 
 const (

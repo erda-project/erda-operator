@@ -29,11 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/erda-project/dice-operator/pkg/cluster/diff"
+	"github.com/erda-project/dice-operator/pkg/cluster/hpa"
+	clusterutils "github.com/erda-project/dice-operator/pkg/cluster/utils"
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/dice-operator/pkg/utils"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
-	clusterutils "github.com/erda-project/dice-operator/pkg/cluster/utils"
 )
 
 const (
@@ -95,6 +97,21 @@ func CreateOrUpdate(
 			return nil, err
 		}
 	} else {
+		// when update a deployment with different replicas with hpa, skip update deployment
+		if *generatedDeploy.Spec.Replicas != *deploy.Spec.Replicas {
+			if clus.Spec.EnableAutoScale {
+				hpa, err := hpa.Get(client, dicesvcname, clus)
+				if err != nil {
+					logrus.Warnf("found hpa %s/%s for deployment %s/%s with error: %v", hpa.Namespace, hpa.Name, deploy.Namespace, deploy.Name, err)
+				} else {
+					generatedDeploy.Spec.Replicas = deploy.Spec.Replicas
+					if diff.IsDeploymentEqual(*generatedDeploy, *deploy) {
+						logrus.Warnf("skip update deployment %s/%s replicas with hpa %s/%s, can not update deployment replicas when hpa enable, you can update other configs or disable hpa for updating replicas and try again", deploy.Namespace, deploy.Name, hpa.Namespace, hpa.Name)
+						return deploy, nil
+					}
+				}
+			}
+		}
 		deploy, err = client.AppsV1().Deployments(clus.Namespace).Update(context.Background(), generatedDeploy, metav1.UpdateOptions{})
 		if err != nil {
 			if errors.IsForbidden(err) || errors.IsInvalid(err) {
