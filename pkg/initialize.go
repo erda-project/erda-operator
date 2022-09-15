@@ -25,6 +25,7 @@ import (
 	"github.com/erda-project/dice-operator/pkg/controller"
 	"github.com/erda-project/dice-operator/pkg/crd"
 	"github.com/erda-project/dice-operator/pkg/utils"
+	"k8s.io/client-go/rest"
 )
 
 const (
@@ -33,13 +34,19 @@ const (
 
 func Initialize() {
 	conf.Load()
+
 	if conf.Debug() {
 		logrus.SetLevel(logrus.DebugLevel)
 		logrus.Debug("DEBUG MODE")
 	}
+
 	config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBE_CONFIG_PATH"))
 	if err != nil {
 		logrus.Fatalf("Failed to create config: %v", err)
+	}
+
+	if !conf.Debug() {
+		config.WarningHandler = rest.NoWarnings{}
 	}
 
 	client, err := kubernetes.NewForConfig(config)

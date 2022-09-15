@@ -18,11 +18,12 @@ import (
 	"github.com/erda-project/dice-operator/pkg/spec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"github.com/erda-project/dice-operator/pkg/cluster/ingress/helper/networking/v1"
 	"github.com/sirupsen/logrus"
 	networkingv1 "k8s.io/api/networking/v1"
-	"github.com/erda-project/dice-operator/pkg/utils"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+
+	"github.com/erda-project/dice-operator/pkg/utils"
+	"github.com/erda-project/dice-operator/pkg/cluster/ingress/helper/networking/v1"
 	v1beta1 "github.com/erda-project/dice-operator/pkg/cluster/ingress/helper/extension/v1beta1"
 )
 
@@ -49,10 +50,10 @@ type IngressHelper interface {
 
 func New(c kubernetes.Interface) IngressHelper {
 	if utils.VersionHas(extensionsv1beta1.SchemeGroupVersion.String()) {
-		logrus.Infof("ingress helper use version: %s", extensionsv1beta1.SchemeGroupVersion.String())
+		logrus.Debugf("ingress helper use version: %s", extensionsv1beta1.SchemeGroupVersion.String())
 		return v1beta1.NewIngress(c.ExtensionsV1beta1())
 	}
 
-	logrus.Infof("ingress helper use version: %s", networkingv1.SchemeGroupVersion.String())
+	logrus.Debugf("ingress helper use version: %s", networkingv1.SchemeGroupVersion.String())
 	return v1.NewIngress(c.NetworkingV1())
 }
