@@ -19,14 +19,15 @@ import (
 	"os"
 	"strings"
 
-	apiextensionv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextension "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apiextensionv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/utils/pointer"
 	"github.com/sirupsen/logrus"
+
 	"github.com/erda-project/dice-operator/pkg/utils"
 )
 
@@ -120,6 +121,10 @@ func CreateCRD(rc *rest.Config) error {
 										Type:                   "object",
 										XPreserveUnknownFields: pointer.Bool(true),
 									},
+									"status": {
+										Type:                   "object",
+										XPreserveUnknownFields: pointer.Bool(true),
+									},
 								},
 							},
 						},
@@ -147,7 +152,7 @@ func CreateCRD(rc *rest.Config) error {
 			return err
 		}
 
-		logrus.Infof("discover apiextension v1beta1, created crd %s.", GetCRDGroupVersion())
+		logrus.Infof("discover apiextension v1, created crd %s.", GetCRDGroupVersion())
 
 		return nil
 	}
@@ -192,12 +197,4 @@ func GetCRDFullName() string {
 func GetCRDGroupVersion() string {
 	group := GetCRDGroup()
 	return fmt.Sprintf("%s/%s", group, CRDVersion)
-}
-
-func IsNotSupportError(err error) bool {
-	if strings.Contains(err.Error(), "not support") {
-		return true
-	}
-
-	return false
 }
