@@ -47,9 +47,10 @@ func NewDaemonsetListDiff(current, target []appsv1.DaemonSet) *DaemonsetListDiff
 }
 
 type DaemonsetListActions struct {
-	AddedDaemonsets   map[string]appsv1.DaemonSet
-	UpdatedDaemonsets map[string]appsv1.DaemonSet
-	DeletedDaemonsets map[string]appsv1.DaemonSet
+	AddedDaemonsets         map[string]appsv1.DaemonSet
+	UpdatedDaemonsets       map[string]appsv1.DaemonSet
+	DeletedDaemonsets       map[string]appsv1.DaemonSet
+	UpdatedDaemonsetsForVPA map[string]appsv1.DaemonSet
 }
 
 func (a *DaemonsetListActions) String() string {
@@ -73,6 +74,8 @@ func (d *DaemonsetListDiff) GetActions() *DaemonsetListActions {
 	missingInSet1, missingInSet2, shared := diffDSSet(d.currentDaemonsets, d.targetDaemonsets)
 	r.AddedDaemonsets = missingInSet1
 	r.DeletedDaemonsets = missingInSet2
+	// For change on turn on/off pod autoscaler, need create or delete pod autoscaler object, so take all daemonsets as need update to trigger create/delete pod autoscaler action
+	r.UpdatedDaemonsetsForVPA = shared
 	r.UpdatedDaemonsets = getNotEqualDSs(d.currentDaemonsets, d.targetDaemonsets, shared)
 	return r
 }

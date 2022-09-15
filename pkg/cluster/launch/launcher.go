@@ -18,14 +18,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	extensions "k8s.io/api/extensions/v1beta1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	vpa_clientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -33,9 +34,11 @@ import (
 	"github.com/erda-project/dice-operator/pkg/cluster/daemonset"
 	"github.com/erda-project/dice-operator/pkg/cluster/deployment"
 	"github.com/erda-project/dice-operator/pkg/cluster/diff"
+	"github.com/erda-project/dice-operator/pkg/cluster/hpa"
 	"github.com/erda-project/dice-operator/pkg/cluster/ingress"
 	"github.com/erda-project/dice-operator/pkg/cluster/service"
 	cluStatus "github.com/erda-project/dice-operator/pkg/cluster/status"
+	"github.com/erda-project/dice-operator/pkg/cluster/vpa"
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/dice-operator/pkg/status"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
@@ -54,11 +57,14 @@ const (
 
 type Launcher struct {
 	*diff.Actions
-	targetspec *spec.DiceCluster
-	ownerRefs  []metav1.OwnerReference
-	client     kubernetes.Interface
-	restclient rest.Interface
-	phase      spec.ClusterPhase
+	targetspec   *spec.DiceCluster
+	ownerRefs    []metav1.OwnerReference
+	client       kubernetes.Interface
+	vpaClientSet *vpa_clientset.Clientset
+	restclient   rest.Interface
+	phase        spec.ClusterPhase
+
+	serviceToPA map[string]spec.PATarget
 }
 
 type result struct {
@@ -75,15 +81,17 @@ func NewLauncher(
 	targetspec *spec.DiceCluster,
 	ownerRefs []metav1.OwnerReference,
 	client kubernetes.Interface,
+	vpaClientSet *vpa_clientset.Clientset,
 	restclient rest.Interface,
-	phase spec.ClusterPhase) *Launcher {
+	phase spec.ClusterPhase,
+	serviceToPA map[string]spec.PATarget) *Launcher {
 	return &Launcher{actions, targetspec, ownerRefs,
-		client, restclient, phase}
+		client, vpaClientSet, restclient, phase, serviceToPA}
 }
 
 func (l *Launcher) Launch() error {
 	if len(l.AddedDaemonSet)+len(l.AddedServices)+len(l.DeletedDaemonSet)+len(l.DeletedServices)+
-		len(l.UpdatedDaemonSet)+len(l.UpdatedServices) > 0 {
+		len(l.UpdatedDaemonSet)+len(l.UpdatedServices)+len(l.UpdatedServicesPA) > 0 {
 		logrus.Infof("launch actions: %s", l.Actions.String())
 	}
 
@@ -91,6 +99,10 @@ func (l *Launcher) Launch() error {
 		logrus.Errorf("launch tmp stuff err: %v", err)
 		return err
 	}
+
+	logrus.Debugf("starting to launch service podscaler process")
+	l.launchUpdatedServicePA()
+	logrus.Debugf("finished to launch service podscaler process")
 
 	var failed bool
 	var errMsg string
@@ -310,6 +322,13 @@ func (l *Launcher) launchAddedService(c chan result, svcName string, diceSvc *di
 		return
 	}
 
+	if l.targetspec.Spec.EnableAutoScale {
+		err := l.CreatePodAutoscalerIfNotExists(svcName, diceSvc)
+		if err != nil {
+			logrus.Warnf("Failed to launch service %s's pod autoscaler: %v", svcName, err)
+		}
+	}
+
 	// check deployment ready, timeout 3600s
 	ctx, _ := context.WithTimeout(context.Background(), 60*time.Minute)
 	err := check.UntilDeploymentReady(ctx, l.client, l.targetspec.Namespace, deployment.GenName(svcName, l.targetspec))
@@ -368,6 +387,26 @@ func (l *Launcher) launchUpdatedService(c chan result, svcName string, diceSvc *
 	c <- result{svcName, msg, true, l.phase}
 }
 
+func (l *Launcher) launchUpdatedServicePA() {
+	if l.targetspec.Spec.EnableAutoScale {
+		for svcName, diceSvc := range l.UpdatedServicesPA {
+			err := l.createOrUpdatePodAutoscaler(svcName, diceSvc)
+			if err != nil {
+				logrus.Warnf("Failed to update service %s's pod autoscaler, create or update error: %v", svcName, err)
+			}
+		}
+	} else {
+		for svcName, _ := range l.UpdatedServicesPA {
+			err := l.deletePodAutoscaler(svcName)
+			if err != nil {
+				logrus.Warnf("Failed to update service %s's pod autoscaler, delete error: %v", svcName, err)
+			}
+		}
+	}
+
+	return
+}
+
 func (l *Launcher) launchDeletedService(c chan result, svcName string, diceSvc *diceyml.Service) {
 	if err := deployment.Delete(l.client, svcName, l.targetspec); err != nil {
 		msg := fmt.Sprintf("Failed to delete deployment: dicesvc: %s, err: %v", svcName, err)
@@ -386,6 +425,11 @@ func (l *Launcher) launchDeletedService(c chan result, svcName string, diceSvc *
 		return
 	}
 
+	err := l.deletePodAutoscaler(svcName)
+	if err != nil {
+		logrus.Warnf("Failed to delete service %s's pod autoscaler: %v", svcName, err)
+	}
+
 	msg := fmt.Sprintf("check %s done", svcName)
 	c <- result{svcName, msg, true, ""}
 }
@@ -395,6 +439,13 @@ func (l *Launcher) LaunchAddedDS(c chan result, svcName string, diceSvc *diceyml
 		msg := fmt.Sprintf("Failed to deploy daemonset: dicesvc: %s, err: %v", svcName, err)
 		c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 		return
+	}
+
+	if l.targetspec.Spec.EnableAutoScale {
+		err := l.CreatePodAutoscalerIfNotExists(svcName, diceSvc)
+		if err != nil {
+			logrus.Warnf("Failed to launch daemon %s's vertical pod autoscaler: %v", svcName, err)
+		}
 	}
 
 	// check DaemonSet ready, timeout 60m
@@ -447,10 +498,95 @@ func (l *Launcher) launchDeletedDS(c chan result, svcName string, diceSvc *dicey
 		return
 	}
 
+	err := l.deletePodAutoscaler(svcName)
+	if err != nil {
+		logrus.Warnf("Failed to delete service %s's pod autoscaler: %v", svcName, err)
+	}
+
 	msg := fmt.Sprintf("check %s done", svcName)
 	c <- result{svcName, msg, true, ""}
 }
 
 func (l *Launcher) isEdge() bool {
 	return len(l.targetspec.Spec.MainPlatform) != 0
+}
+
+func (l *Launcher) CreatePodAutoscalerIfNotExists(svcName string, dicesvc *diceyml.Service) error {
+	paTarget, ok := l.serviceToPA[svcName]
+	if ok {
+		switch paTarget.PAKind {
+		case spec.PANameVPA:
+			_, err := vpa.CreateIfNotExists(l.vpaClientSet, svcName, dicesvc, l.targetspec, l.ownerRefs, paTarget.TargetControllerKind)
+			if err != nil {
+				return fmt.Errorf("create vpa error: %v", err)
+			}
+			return nil
+
+		case spec.PANameHPA:
+			_, err := hpa.CreateIfNotExists(l.client, svcName, dicesvc, l.targetspec, l.ownerRefs)
+			if err != nil {
+				return fmt.Errorf("create hpa error: %v", err)
+			}
+			return nil
+
+		default:
+			return fmt.Errorf("failed to create pod autoscaler object: unknown pod autoscaler Kind %v", paTarget.PAKind)
+		}
+	}
+	return nil
+}
+
+func (l *Launcher) createOrUpdatePodAutoscaler(svcName string, dicesvc *diceyml.Service) error {
+	paTarget, ok := l.serviceToPA[svcName]
+	if ok {
+		switch paTarget.PAKind {
+		case spec.PANameVPA:
+			_, err := vpa.CreateIfNotExists(l.vpaClientSet, svcName, dicesvc, l.targetspec, l.ownerRefs, paTarget.TargetControllerKind)
+			//_, err := vpa.CreateOrUpdate(l.vpaClientSet, svcName, dicesvc, l.targetspec, l.ownerRefs, paTarget.TargetControllerKind)
+			if err != nil {
+				return fmt.Errorf("create vpa error: %v", err)
+			}
+			logrus.Infof("create vpa for %s sucessully............", svcName)
+			return nil
+
+		case spec.PANameHPA:
+			_, err := hpa.CreateOrUpdate(l.client, svcName, dicesvc, l.targetspec, l.ownerRefs)
+			if err != nil {
+				return fmt.Errorf("create hpa error: %v", err)
+			}
+			logrus.Infof("create hpa for %s sucessully............", svcName)
+			return nil
+
+		default:
+			return fmt.Errorf("failed to create pod autoscaler object: unknown pod autoscaler Kind %v", paTarget.PAKind)
+		}
+	}
+	return nil
+}
+
+func (l *Launcher) deletePodAutoscaler(svcName string) error {
+	paTarget, ok := l.serviceToPA[svcName]
+	if ok {
+		switch paTarget.PAKind {
+		case spec.PANameVPA:
+			err := vpa.Delete(l.vpaClientSet, svcName, l.targetspec)
+			if err != nil {
+				return fmt.Errorf("delete vpa error: %v", err)
+			}
+			logrus.Infof("delete vpa for %s sucessully............", svcName)
+			return nil
+
+		case spec.PANameHPA:
+			err := hpa.Delete(l.client, svcName, l.targetspec)
+			if err != nil {
+				return fmt.Errorf("delete hpa error: %v", err)
+			}
+			logrus.Infof("delete hpa for %s sucessully............", svcName)
+			return nil
+
+		default:
+			return fmt.Errorf("failed to delete pod autoscaler object: unknown pod autoscaler Kind %v", paTarget.PAKind)
+		}
+	}
+	return nil
 }
