@@ -47,4 +47,5 @@ require (
 	k8s.io/apimachinery v0.21.2
 	k8s.io/autoscaler/vertical-pod-autoscaler v0.11.0
 	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b // indirect
 )

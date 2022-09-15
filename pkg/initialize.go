@@ -24,6 +24,7 @@ import (
 	"github.com/erda-project/dice-operator/pkg/conf"
 	"github.com/erda-project/dice-operator/pkg/controller"
 	"github.com/erda-project/dice-operator/pkg/crd"
+	"github.com/erda-project/dice-operator/pkg/utils"
 )
 
 const (
@@ -45,6 +46,11 @@ func Initialize() {
 	if err != nil {
 		logrus.Fatalf("Failed to create client: %v", err)
 	}
+
+	if err := utils.InitializeGroups(client); err != nil {
+		logrus.Fatalf("Failed to initialize groups: %v", err)
+	}
+
 	if err := crd.CreateCRD(config); err != nil {
 		logrus.Fatalf("Failed to create crd: %v", err)
 	}
