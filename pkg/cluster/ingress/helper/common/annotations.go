@@ -11,15 +11,30 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-package ingress
+package common
 
 import (
-	"github.com/erda-project/erda/pkg/parser/diceyml"
+	"os"
+
+	"github.com/erda-project/dice-operator/pkg/cluster/ingress/helper/types"
 )
 
-func HasIngress(dicesvc *diceyml.Service) bool {
-	if dicesvc == nil {
-		return false
+func Annotations(svcName string) map[string]string {
+	enableAccessLog := "false"
+
+	if os.Getenv(types.EnableComponentAccessLog) == "true" {
+		enableAccessLog = "true"
 	}
-	return len(dicesvc.Expose) > 0
+
+	annotation := map[string]string{
+		"nginx.ingress.kubernetes.io/enable-access-log": enableAccessLog,
+	}
+
+	switch svcName {
+	case "gittar", "erda-server", "ui":
+		annotation["nginx.ingress.kubernetes.io/proxy-body-size"] = "0"
+	default:
+	}
+
+	return annotation
 }

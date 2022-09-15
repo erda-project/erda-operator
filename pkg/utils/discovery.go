@@ -11,15 +11,36 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-package ingress
+package utils
 
 import (
-	"github.com/erda-project/erda/pkg/parser/diceyml"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-func HasIngress(dicesvc *diceyml.Service) bool {
-	if dicesvc == nil {
-		return false
+var (
+	serverVersions = sets.String{}
+)
+
+func InitializeGroups(c kubernetes.Interface) error {
+	groups, err := c.Discovery().ServerGroups()
+	if err != nil {
+		return err
 	}
-	return len(dicesvc.Expose) > 0
+
+	versions := metav1.ExtractGroupVersions(groups)
+	for _, v := range versions {
+		serverVersions.Insert(v)
+	}
+
+	return err
+}
+
+func GetServerVersions() sets.String {
+	return serverVersions
+}
+
+func VersionHas(v string) bool {
+	return serverVersions.Has(v)
 }

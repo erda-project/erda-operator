@@ -21,9 +21,13 @@ import (
 
 	apiextensionv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextension "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
+	"k8s.io/apimachinery/pkg/api/errors"
+	apiextensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/utils/pointer"
+	"github.com/sirupsen/logrus"
+	"github.com/erda-project/dice-operator/pkg/utils"
 )
 
 const (
@@ -36,51 +40,119 @@ const (
 )
 
 // CreateCRD create 'dice' crd if not exists yet
-func CreateCRD(config *rest.Config) error {
-	client, err := apiextension.NewForConfig(config)
+func CreateCRD(rc *rest.Config) error {
+	client, err := apiextension.NewForConfig(rc)
 	if err != nil {
 		return err
 	}
 
-	crd := apiextensionv1beta1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: GetCRDFullName()},
-		Spec: apiextensionv1beta1.CustomResourceDefinitionSpec{
-			Group: GetCRDGroup(),
-			Versions: []apiextensionv1beta1.CustomResourceDefinitionVersion{{
-				Name:    CRDVersion,
-				Served:  true,
-				Storage: true,
-			}},
-			Scope: apiextensionv1beta1.NamespaceScoped,
-			Names: apiextensionv1beta1.CustomResourceDefinitionNames{
-				Plural:   GetCRDPlural(),
-				Singular: GetCRDSingular(),
-				Kind:     GetCRDKind(),
-			},
-			AdditionalPrinterColumns: []apiextensionv1beta1.CustomResourceColumnDefinition{
-				{
-					Name:        "Status",
-					Type:        "string",
-					Description: "Dice cluster current status",
-					JSONPath:    ".status.phase",
-				},
-				{
-					Name:        "LastMessage",
-					Type:        "string",
-					Description: "last message",
-					JSONPath:    ".status.conditions[0].reason",
-				},
-			},
-			Subresources: &apiextensionv1beta1.CustomResourceSubresources{
-				Status: &apiextensionv1beta1.CustomResourceSubresourceStatus{},
-			},
-		},
-	}
-	_, err = client.ApiextensionsV1beta1().CustomResourceDefinitions().Create(context.Background(), &crd, metav1.CreateOptions{})
-	if err != nil && apierrors.IsAlreadyExists(err) {
+	if utils.VersionHas(GetCRDGroupVersion()) {
+		logrus.Infof("crd %s already existed, skip create.", GetCRDGroupVersion())
 		return nil
 	}
-	return err
+
+	if utils.VersionHas(apiextensionv1beta1.SchemeGroupVersion.String()) {
+		_, err = client.ApiextensionsV1beta1().CustomResourceDefinitions().Create(
+			context.Background(), &apiextensionv1beta1.CustomResourceDefinition{
+				ObjectMeta: metav1.ObjectMeta{Name: GetCRDFullName()},
+				Spec: apiextensionv1beta1.CustomResourceDefinitionSpec{
+					Group: GetCRDGroup(),
+					Versions: []apiextensionv1beta1.CustomResourceDefinitionVersion{{
+						Name:    CRDVersion,
+						Served:  true,
+						Storage: true,
+					}},
+					Scope: apiextensionv1beta1.NamespaceScoped,
+					Names: apiextensionv1beta1.CustomResourceDefinitionNames{
+						Plural:   GetCRDPlural(),
+						Singular: GetCRDSingular(),
+						Kind:     GetCRDKind(),
+					},
+					AdditionalPrinterColumns: []apiextensionv1beta1.CustomResourceColumnDefinition{
+						{
+							Name:        "Status",
+							Type:        "string",
+							Description: "Dice cluster current status",
+							JSONPath:    ".status.phase",
+						},
+						{
+							Name:        "LastMessage",
+							Type:        "string",
+							Description: "last message",
+							JSONPath:    ".status.conditions[0].reason",
+						},
+					},
+					Subresources: &apiextensionv1beta1.CustomResourceSubresources{
+						Status: &apiextensionv1beta1.CustomResourceSubresourceStatus{},
+					},
+				},
+			}, metav1.CreateOptions{})
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return err
+		}
+
+		logrus.Infof("discover apiextension v1beta1, created crd %s.", GetCRDGroupVersion())
+
+		return nil
+	}
+
+	if utils.VersionHas(apiextensionv1.SchemeGroupVersion.String()) {
+		_, err = client.ApiextensionsV1().CustomResourceDefinitions().Create(
+			context.Background(), &apiextensionv1.CustomResourceDefinition{
+				ObjectMeta: metav1.ObjectMeta{Name: GetCRDFullName()},
+				Spec: apiextensionv1.CustomResourceDefinitionSpec{
+					Group: GetCRDGroup(),
+					Names: apiextensionv1.CustomResourceDefinitionNames{
+						Plural:   GetCRDPlural(),
+						Singular: GetCRDSingular(),
+						Kind:     GetCRDKind(),
+					},
+					Scope: apiextensionv1.NamespaceScoped,
+					Versions: []apiextensionv1.CustomResourceDefinitionVersion{{
+						Name:    CRDVersion,
+						Served:  true,
+						Storage: true,
+						Schema: &apiextensionv1.CustomResourceValidation{
+							OpenAPIV3Schema: &apiextensionv1.JSONSchemaProps{
+								Type: "object",
+								Properties: map[string]apiextensionv1.JSONSchemaProps{
+									"spec": {
+										Type:                   "object",
+										XPreserveUnknownFields: pointer.Bool(true),
+									},
+								},
+							},
+						},
+						Subresources: &apiextensionv1.CustomResourceSubresources{
+							Status: &apiextensionv1.CustomResourceSubresourceStatus{},
+						},
+						AdditionalPrinterColumns: []apiextensionv1.CustomResourceColumnDefinition{
+							{
+								Name:        "Status",
+								Type:        "string",
+								Description: "Dice cluster current status",
+								JSONPath:    ".status.phase",
+							},
+							{
+								Name:        "LastMessage",
+								Type:        "string",
+								Description: "last message",
+								JSONPath:    ".status.conditions[0].reason",
+							},
+						},
+					}},
+				},
+			}, metav1.CreateOptions{})
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return err
+		}
+
+		logrus.Infof("discover apiextension v1beta1, created crd %s.", GetCRDGroupVersion())
+
+		return nil
+	}
+
+	return fmt.Errorf("unkonwn schema version finded")
 }
 
 func GetCRDPlural() string {
@@ -120,4 +192,12 @@ func GetCRDFullName() string {
 func GetCRDGroupVersion() string {
 	group := GetCRDGroup()
 	return fmt.Sprintf("%s/%s", group, CRDVersion)
+}
+
+func IsNotSupportError(err error) bool {
+	if strings.Contains(err.Error(), "not support") {
+		return true
+	}
+
+	return false
 }

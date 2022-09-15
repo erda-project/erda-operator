@@ -42,6 +42,7 @@ import (
 	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/dice-operator/pkg/status"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
+	"github.com/erda-project/dice-operator/pkg/cluster/ingress/helper"
 )
 
 const (
@@ -64,6 +65,8 @@ type Launcher struct {
 	restclient   rest.Interface
 	phase        spec.ClusterPhase
 
+	ingressHelper helper.IngressHelper
+
 	serviceToPA map[string]spec.PATarget
 }
 
@@ -85,8 +88,17 @@ func NewLauncher(
 	restclient rest.Interface,
 	phase spec.ClusterPhase,
 	serviceToPA map[string]spec.PATarget) *Launcher {
-	return &Launcher{actions, targetspec, ownerRefs,
-		client, vpaClientSet, restclient, phase, serviceToPA}
+	return &Launcher{
+		Actions:       actions,
+		targetspec:    targetspec,
+		ownerRefs:     ownerRefs,
+		client:        client,
+		vpaClientSet:  vpaClientSet,
+		restclient:    restclient,
+		phase:         phase,
+		ingressHelper: helper.New(client),
+		serviceToPA:   serviceToPA,
+	}
 }
 
 func (l *Launcher) Launch() error {
@@ -309,7 +321,7 @@ func (l *Launcher) launchAddedService(c chan result, svcName string, diceSvc *di
 	}
 
 	if ingress.HasIngress(diceSvc) && !(l.isEdge() && svcName == collector) {
-		if _, err := ingress.CreateIfNotExists(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
+		if err := l.ingressHelper.CreateIfNotExists(svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
 			msg := fmt.Sprintf("Failed to deploy ingress: dicesvc: %s, err: %v", svcName, err)
 			c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 			return
@@ -356,7 +368,7 @@ func (l *Launcher) launchUpdatedService(c chan result, svcName string, diceSvc *
 	}
 
 	if ingress.HasIngress(diceSvc) && !(l.isEdge() && svcName == collector) {
-		if _, err := ingress.CreateOrUpdate(l.client, svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
+		if err := l.ingressHelper.CreateOrUpdate(svcName, diceSvc, l.targetspec, l.ownerRefs); err != nil {
 			msg := fmt.Sprintf("Failed to update ingress: dicesvc: %s, err: %v", svcName, err)
 			c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 			return
@@ -419,7 +431,7 @@ func (l *Launcher) launchDeletedService(c chan result, svcName string, diceSvc *
 		c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 		return
 	}
-	if err := ingress.Delete(l.client, svcName, l.targetspec); err != nil {
+	if err := l.ingressHelper.Delete(svcName, l.targetspec); err != nil {
 		msg := fmt.Sprintf("Failed to delete ingress: dicesvc: %s, err: %v", svcName, err)
 		c <- result{svcName, msg, false, spec.ClusterPhaseFailed}
 		return

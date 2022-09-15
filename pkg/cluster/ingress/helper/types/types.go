@@ -11,15 +11,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-package ingress
+package types
 
-import (
-	"github.com/erda-project/erda/pkg/parser/diceyml"
+const (
+	EnableComponentAccessLog = "ENABLE_COMPONENT_ACCESS_LOG"
+	ClusterManager           = "cluster-manager"
+	Openapi                  = "openapi"
+	ErdaServer               = "erda-server"
+	AgentRegisterPath        = "/clusteragent/connect"
 )
-
-func HasIngress(dicesvc *diceyml.Service) bool {
-	if dicesvc == nil {
-		return false
-	}
-	return len(dicesvc.Expose) > 0
-}
