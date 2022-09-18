@@ -105,7 +105,7 @@ func CreateOrUpdate(
 					logrus.Warnf("found hpa %s/%s for deployment %s/%s with error: %v", hpa.Namespace, hpa.Name, deploy.Namespace, deploy.Name, err)
 				} else {
 					generatedDeploy.Spec.Replicas = deploy.Spec.Replicas
-					if diff.IsDeploymentEqual(*generatedDeploy, *deploy) {
+					if diff.IsDeploymentEqual(*deploy, *generatedDeploy) {
 						logrus.Warnf("skip update deployment %s/%s replicas with hpa %s/%s, can not update deployment replicas when hpa enable, you can update other configs or disable hpa for updating replicas and try again", deploy.Namespace, deploy.Name, hpa.Namespace, hpa.Name)
 						return deploy, nil
 					}
