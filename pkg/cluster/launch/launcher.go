@@ -107,10 +107,11 @@ func (l *Launcher) Launch() error {
 		logrus.Infof("launch actions: %s", l.Actions.String())
 	}
 
-	if err := l.launchTmpStuff(); err != nil {
-		logrus.Errorf("launch tmp stuff err: %v", err)
-		return err
-	}
+	// TODO: remove publish from collector
+	//if err := l.launchTmpStuff(); err != nil {
+	//	logrus.Errorf("launch tmp stuff err: %v", err)
+	//	return err
+	//}
 
 	logrus.Debugf("starting to launch service podscaler process")
 	l.launchUpdatedServicePA()
