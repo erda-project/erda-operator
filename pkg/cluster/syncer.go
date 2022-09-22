@@ -233,7 +233,7 @@ func (c *Syncer) checkPodAutoscalers(deployments, daemonsets map[string]*diceyml
 
 	needToPA = make(map[string]*diceyml.Service)
 
-	vpaList, err := vpa.ListHPAInNamespace(vpaClientSet, c.target)
+	vpaList, err := vpa.ListVPAInNamespace(vpaClientSet, c.target)
 	if err != nil {
 		logrus.Errorf("list vpa in namespace %s error: %v", c.target.Namespace, err)
 		return needToPA
@@ -257,41 +257,49 @@ func (c *Syncer) checkPodAutoscalers(deployments, daemonsets map[string]*diceyml
 			}
 		}
 
-		for _, hpa := range hpaList.Items {
-			svcName := strings.SplitN(hpa.Name, "-", 2)[1]
-			if _, ok := needToPA[svcName]; ok {
-				delete(needToPA, svcName)
+		if hpaList != nil {
+			for _, hpa := range hpaList.Items {
+				svcName := strings.SplitN(hpa.Name, "-", 2)[1]
+				if _, ok := needToPA[svcName]; ok {
+					delete(needToPA, svcName)
+				}
 			}
 		}
 
-		for _, vpa := range vpaList.Items {
-			svcName := strings.SplitN(vpa.Name, "-", 2)[1]
-			if _, ok := needToPA[svcName]; ok {
-				delete(needToPA, svcName)
+		if vpaList != nil {
+			for _, vpa := range vpaList.Items {
+				svcName := strings.SplitN(vpa.Name, "-", 2)[1]
+				if _, ok := needToPA[svcName]; ok {
+					delete(needToPA, svcName)
+				}
 			}
 		}
 	} else {
-		for _, hpa := range hpaList.Items {
-			svcName := strings.SplitN(hpa.Name, "-", 2)[1]
-			if _, ok := deployments[svcName]; ok {
-				needToPA[svcName] = deployments[svcName]
-				continue
-			}
-			if _, ok := daemonsets[svcName]; ok {
-				needToPA[svcName] = daemonsets[svcName]
-				continue
+		if hpaList != nil {
+			for _, hpa := range hpaList.Items {
+				svcName := strings.SplitN(hpa.Name, "-", 2)[1]
+				if _, ok := deployments[svcName]; ok {
+					needToPA[svcName] = deployments[svcName]
+					continue
+				}
+				if _, ok := daemonsets[svcName]; ok {
+					needToPA[svcName] = daemonsets[svcName]
+					continue
+				}
 			}
 		}
 
-		for _, vpa := range vpaList.Items {
-			svcName := strings.SplitN(vpa.Name, "-", 2)[1]
-			if _, ok := deployments[svcName]; ok {
-				needToPA[svcName] = deployments[svcName]
-				continue
-			}
-			if _, ok := daemonsets[svcName]; ok {
-				needToPA[svcName] = daemonsets[svcName]
-				continue
+		if vpaList != nil {
+			for _, vpa := range vpaList.Items {
+				svcName := strings.SplitN(vpa.Name, "-", 2)[1]
+				if _, ok := deployments[svcName]; ok {
+					needToPA[svcName] = deployments[svcName]
+					continue
+				}
+				if _, ok := daemonsets[svcName]; ok {
+					needToPA[svcName] = daemonsets[svcName]
+					continue
+				}
 			}
 		}
 	}
