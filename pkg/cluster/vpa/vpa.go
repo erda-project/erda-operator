@@ -52,7 +52,7 @@ func GenVPACheckpointName(dicesvcname string, clus *spec.DiceCluster) string {
 	return strutil.Concat(clus.Name, "-", dicesvcname, "-", dicesvcname)
 }
 
-func ListHPAInNamespace(vpaClientSet vpa_clientset.Interface, clus *spec.DiceCluster) (*autoscalingv1.VerticalPodAutoscalerList, error) {
+func ListVPAInNamespace(vpaClientSet vpa_clientset.Interface, clus *spec.DiceCluster) (*autoscalingv1.VerticalPodAutoscalerList, error) {
 	vpaList, err := vpaClientSet.AutoscalingV1().VerticalPodAutoscalers(clus.Namespace).List(context.Background(),
 		metav1.ListOptions{LabelSelector: "dice/koperator=true," + fmt.Sprintf("dice/cluster-name=%s", clus.Name)})
 	if err != nil {
