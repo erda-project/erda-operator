@@ -1,4 +1,6 @@
-FROM registry.erda.cloud/erda/golang:1.16.6-stretch AS builder
+ARG ARCH
+
+FROM --platform=${ARCH} golang:1.19-bullseye as builder
 
 ARG GO_PROJECT_ROOT
 ARG GO_PROXY
@@ -15,11 +17,13 @@ COPY go.sum go.sum
 
 RUN go mod download
 
-COPY . .
+COPY pkg pkg
+COPY cmd cmd
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/dice-operator cmd/dice-operator/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} \
+    go build -o bin/dice-operator cmd/dice-operator/main.go
 
-FROM registry.erda.cloud/erda/alpine:3.14
+FROM --platform=${ARCH} debian:bullseye-slim
 
 ARG GO_PROJECT_ROOT
 
