@@ -12,6 +12,14 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 GO_PROJECT_ROOT := github.com/erda-project/erda
+ARCH ?= amd64
+
+REGISTRY ?= registry.erda.cloud/erda
+VERSION ?= $(shell cat ./VERSION)
+BUILD_TIME ?= $(shell date -u '+%Y-%m-%d %H:%M:%S')
+GIT_SHORT_COMMIT ?= $(shell git rev-parse --short HEAD)
+GIT_COMMIT ?= $(shell git rev-parse HEAD)
+IMG ?= ${REGISTRY}/dice-operator:${VERSION}-$(shell date '+%Y%m%d')-${GIT_SHORT_COMMIT}
 
 ifeq ($(GO_PROXY_ENV),)
 	GO_PROXY := "https://goproxy.cn,direct"
@@ -19,36 +27,26 @@ else
 	GO_PROXY := $(GO_PROXY_ENV)
 endif
 
-ifeq ($(REGISTRY_HOST),)
-    REGISTRY := registry.erda.cloud/erda
-else
-    REGISTRY := $(REGISTRY_HOST)
-endif
+build-version:
+	@echo Arch: ${ARCH}
+	@echo Version: ${VERSION}
+	@echo Build Time: ${BUILD_TIME}
+	@echo Git Commit: ${GIT_COMMIT}
+	@echo IMG: ${IMG}
 
-BUILD_DIR := ./build
-TARGETS_DIR := dice-operator
-IMAGE_PREFIX ?= $(strip )
-IMAGE_SUFFIX ?= $(strip )
+default: build
 
-IMAGE_TAG ?= "$(shell cat VERSION)-$(shell date '+%Y%m%d%H%M%S')-$(shell git rev-parse --short HEAD --dirty)"
-DOCKER_LABELS ?= git-describe="$(IMAGE_TAG)"
+build: build-version
+	@echo "build dice-operator"
+	@CGO_ENABLED=0 GOARCH=${ARCH} go build -o bin/dice-operator-${ARCH} ./cmd/dice-operator
 
-GO_OPTIONS ?= -mod=vendor -count=1
-SHELLOPTS := errexit
+docker-build: build-version
+	@docker build -t ${IMG}  														 \
+	  --build-arg ARCH=$(ARCH)                          					  	     \
+	  --build-arg GO_PROJECT_ROOT=$(GO_PROJECT_ROOT)                                 \
+	  --build-arg GO_PROXY=$(GO_PROXY) .
 
-container:
-	@for target in $(TARGETS_DIR); do                                                  \
-	  image=$(IMAGE_PREFIX)$${target}$(IMAGE_SUFFIX);                                  \
-	  docker build -t $(REGISTRY)/$${image}:$(IMAGE_TAG)                               \
-	    --build-arg GO_PROJECT_ROOT=$(GO_PROJECT_ROOT)                                 \
-	    --build-arg GO_PROXY=$(GO_PROXY)                                 \
-	    --label $(DOCKER_LABELS)                                                       \
-	    -f $(BUILD_DIR)/$${target}/Dockerfile .;                                       \
-	  echo "image=$(REGISTRY)/$${image}:$(IMAGE_TAG)" >> $${METAFILE};		   \
-	done
+docker-push:
+	@docker push ${IMG}
 
-push: container
-	@for target in $(TARGETS_DIR); do                                                  \
-	  image=$(IMAGE_PREFIX)$${target}$(IMAGE_SUFFIX);                                  \
-	  docker push $(REGISTRY)/$${image}:$(IMAGE_TAG);                                  \
-	done
+docker-build-push: docker-build docker-push
