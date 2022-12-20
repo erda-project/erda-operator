@@ -112,19 +112,23 @@ func buildService(
 		})
 	}
 
+	labels := map[string]string{
+		"dice/component":    dicesvcname,
+		"dice/koperator":    "true",
+		"dice/cluster-name": clus.Name,
+	}
+	selectorLabels := labels
+
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            convertServiceName(dicesvcname),
 			Namespace:       clus.Namespace,
 			OwnerReferences: ownerRefs,
+			Labels:          labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"dice/component":    dicesvcname,
-				"dice/koperator":    "true",
-				"dice/cluster-name": clus.Name,
-			},
-			Ports: ports,
+			Selector: selectorLabels,
+			Ports:    ports,
 		},
 	}
 }
