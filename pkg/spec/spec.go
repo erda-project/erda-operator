@@ -47,14 +47,14 @@ const (
 	ClusterSizeProd ClusterSize = "prod"
 )
 
-const(
+const (
 	PANameHPA = "HPA"
 	PANameVPA = "VPA"
 )
 
-type PATarget struct{
-	PAKind                string
-	TargetControllerKind  string
+type PATarget struct {
+	PAKind               string
+	TargetControllerKind string
 }
 
 type DiceClusterList struct {
@@ -99,6 +99,7 @@ type ClusterSpec struct {
 	Pandora        diceyml.Object `json:"pandora"`
 	DiceUI         diceyml.Object `json:"diceUI"`
 	UC             diceyml.Object `json:"uc"`
+	License        diceyml.Object `json:"license"`
 	SpotAnalyzer   diceyml.Object `json:"spotAnalyzer"`
 	SpotCollector  diceyml.Object `json:"spotCollector"`
 	SpotDashboard  diceyml.Object `json:"spotDashboard"`
