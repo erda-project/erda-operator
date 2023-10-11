@@ -16,10 +16,13 @@ ARCH ?= amd64
 
 REGISTRY ?= registry.erda.cloud/erda
 VERSION ?= $(shell cat ./VERSION)
-BUILD_TIME ?= $(shell date -u '+%Y-%m-%d %H:%M:%S')
-GIT_SHORT_COMMIT ?= $(shell git rev-parse --short HEAD)
-GIT_COMMIT ?= $(shell git rev-parse HEAD)
-IMG ?= ${REGISTRY}/dice-operator:${VERSION}-$(shell date '+%Y%m%d')-${GIT_SHORT_COMMIT}
+BUILD_TIME := $(shell date -u '+%Y-%m-%d %H:%M:%S')
+GIT_SHORT_COMMIT := $(shell git rev-parse --short HEAD)
+GIT_COMMIT := $(shell git rev-parse HEAD)
+DEFAULT_IMAGE_TAG := ${VERSION}-$(shell date -u +"%Y%m%d%H%M%S")-${GIT_SHORT_COMMIT}
+IMAGE_TAG ?= $(DEFAULT_IMAGE_TAG)
+IMAGE := ${REGISTRY}/dice-operator:$(IMAGE_TAG)
+IMAGE_VERSION_LATEST := ${REGISTRY}/dice-operator:${VERSION}
 
 ifeq ($(GO_PROXY_ENV),)
 	GO_PROXY := "https://goproxy.cn,direct"
@@ -32,7 +35,7 @@ build-version:
 	@echo Version: ${VERSION}
 	@echo Build Time: ${BUILD_TIME}
 	@echo Git Commit: ${GIT_COMMIT}
-	@echo IMG: ${IMG}
+	@echo Image: ${IMAGE}
 
 default: build
 
@@ -41,12 +44,17 @@ build: build-version
 	@CGO_ENABLED=0 GOARCH=${ARCH} go build -o bin/dice-operator-${ARCH} ./cmd/dice-operator
 
 docker-build: build-version
-	@docker build -t ${IMG}  														 \
-	  --build-arg ARCH=$(ARCH)                          					  	     \
-	  --build-arg GO_PROJECT_ROOT=$(GO_PROJECT_ROOT)                                 \
+	@docker build -t $(IMAGE)	\
+	  --build-arg ARCH=$(ARCH) \
+	  --build-arg GO_PROJECT_ROOT=$(GO_PROJECT_ROOT) \
 	  --build-arg GO_PROXY=$(GO_PROXY) .
 
-docker-push:
-	@docker push ${IMG}
+docker-build-push: docker-build
+	@docker push $(IMAGE)
+	@echo action meta: image=$(IMAGE)
 
-docker-build-push: docker-build docker-push
+docker-version-latest: docker-build-push
+	@echo "retag image $(IMAGE) to $(IMAGE_VERSION_LATEST)"
+	@docker tag $(IMAGE) $(IMAGE_VERSION_LATEST)
+	@docker push $(IMAGE_VERSION_LATEST)
+	@echo action meta: image_version_latest=$(IMAGE_VERSION_LATEST)

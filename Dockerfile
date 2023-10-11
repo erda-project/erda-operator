@@ -1,6 +1,6 @@
 ARG ARCH
 
-FROM --platform=${ARCH} golang:1.19-bullseye as builder
+FROM --platform=${ARCH} registry.erda.cloud/retag/golang:1.19-bullseye  as builder
 
 ARG GO_PROJECT_ROOT
 ARG GO_PROXY
@@ -12,8 +12,7 @@ ENV GOPATH=/go
 
 RUN go env -w GOPROXY=${GO_PROXY}
 
-COPY go.mod go.mod
-COPY go.sum go.sum
+COPY go.mod go.sum ./
 
 RUN go mod download
 
@@ -23,7 +22,7 @@ COPY cmd cmd
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} \
     go build -o bin/dice-operator cmd/dice-operator/main.go
 
-FROM --platform=${ARCH} debian:bullseye-slim
+FROM --platform=${ARCH} registry.erda.cloud/retag/debian:bullseye-slim
 
 ARG GO_PROJECT_ROOT
 

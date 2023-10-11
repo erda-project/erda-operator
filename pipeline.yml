@@ -24,22 +24,7 @@ stages:
           commands:
             - cd ${{ dirs.erda-operator }}
             - docker login ${{ configs.docker_registry }} -u ${{ configs.docker_registry_username }} -p ${{ configs.docker_registry_password }}
-            - GO_PROXY_ENV=https://goproxy.cn/ REGISTRY_HOST=${{ configs.docker_registry }} IMAGE_TAG=${{ outputs.extract-repo-version.image_tag }} make push
-          resources:
-            cpu: 2
-            mem: 2048
-  - stage:
-      - custom-script:
-          alias: retag-erda-operator-image
-          version: "1.0"
-          commands:
-            - cd ${erda-operator}
-            - docker pull ${{ outputs.build-erda-operator.image }}
-            - docker login ${{ configs.docker_registry }} -u ${{ configs.docker_registry_username }} -p ${{ configs.docker_registry_password }}
-            - export new_image=${{ configs.docker_registry }}/dice-operator:${{ outputs.extract-repo-version.version }}
-            - docker tag ${{ outputs.build-erda-operator.image }} $new_image
-            - docker push $new_image
-            - echo "action meta:image=$new_image"
+            - REGISTRY=${{ configs.docker_registry }} IMAGE_TAG=${{ outputs.extract-repo-version.image_tag }} make docker-version-latest
           resources:
             cpu: 2
             mem: 2048
