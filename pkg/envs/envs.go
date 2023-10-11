@@ -21,9 +21,10 @@ import (
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/erda-project/dice-operator/pkg/spec"
 	"github.com/erda-project/erda/pkg/parser/diceyml"
 	"github.com/erda-project/erda/pkg/strutil"
+
+	"github.com/erda-project/dice-operator/pkg/spec"
 )
 
 const (
@@ -44,6 +45,7 @@ func GetAllServices(cluster *spec.DiceCluster) []diceyml.Services {
 		cluster.Spec.Pandora.Services,
 		cluster.Spec.DiceUI.Services,
 		cluster.Spec.UC.Services,
+		cluster.Spec.License.Services,
 		cluster.Spec.SpotAnalyzer.Services,
 		cluster.Spec.SpotCollector.Services,
 		cluster.Spec.SpotDashboard.Services,
