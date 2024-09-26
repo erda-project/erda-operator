@@ -27,7 +27,7 @@ stages:
               GO_PROJECT_ROOT: "github.com/erda-project/erda"
               GO_PROXY: "https://goproxy.cn,direct"
             image:
-              name: erda-operator
+              name: dice-operator
               tag: ${{ outputs.extract-repo-version.image_tag }}
             path: ${{ dirs.erda-operator }}/Dockerfile
             registry:
