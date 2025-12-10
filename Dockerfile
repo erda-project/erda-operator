@@ -1,26 +1,27 @@
-FROM --platform=${TARGETARCH} registry.erda.cloud/retag/golang:1.19-bullseye  as builder
+FROM registry.erda.cloud/erda-x/golang:1.24 AS builder
 
 ARG GO_PROJECT_ROOT
 ARG GO_PROXY
 
 WORKDIR /go/src/${GO_PROJECT_ROOT}
 
-ENV GO111MODULE=on
-ENV GOPATH=/go
+ENV GO111MODULE=on \
+    GOPATH=/go \
+    CGO_ENABLED=0
 
 RUN go env -w GOPROXY=${GO_PROXY}
 
-COPY go.mod go.sum ./
+COPY go.mod go.mod
+COPY go.sum go.sum
 
 RUN go mod download
 
 COPY pkg pkg
 COPY cmd cmd
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -o bin/dice-operator cmd/dice-operator/main.go
+RUN go build -o bin/dice-operator cmd/dice-operator/main.go
 
-FROM --platform=${TARGETARCH} registry.erda.cloud/retag/debian:bullseye-slim
+FROM registry.erda.cloud/erda-x/debian-bookworm:12
 
 ARG GO_PROJECT_ROOT
 

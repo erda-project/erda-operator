@@ -12,7 +12,6 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 GO_PROJECT_ROOT := github.com/erda-project/erda
-ARCH ?= amd64
 PLATFORM ?= linux/amd64,linux/arm64
 
 REGISTRY ?= registry.erda.cloud/erda
@@ -32,7 +31,6 @@ else
 endif
 
 build-version:
-	@echo Arch: ${PLATFORM}
 	@echo Version: ${VERSION}
 	@echo Build Time: ${BUILD_TIME}
 	@echo Git Commit: ${GIT_COMMIT}
@@ -42,9 +40,9 @@ default: build
 
 build: build-version
 	@echo "build dice-operator"
-	@CGO_ENABLED=0 GOARCH=${ARCH} go build -o bin/dice-operator-${ARCH} ./cmd/dice-operator
+	@CGO_ENABLED=0 go build -o bin/dice-operator-${ARCH} ./cmd/dice-operator
 
-docker-build-push: build-version
+build-push-image: build-version
 	@docker buildx create --use --platform $(PLATFORM) --driver docker-container
 	@docker buildx build \
 	  --push \
