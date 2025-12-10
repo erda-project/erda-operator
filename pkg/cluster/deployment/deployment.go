@@ -197,6 +197,17 @@ func BuildDeployment(
 					"dice/cluster-name": clus.Name,
 				},
 			},
+			Strategy: func() appsv1.DeploymentStrategy {
+				updateStrategy, ok := dicesvc.Annotations[spec.AnnotationAppUpdateStrategy.String()]
+				if ok && strings.ToLower(updateStrategy) == strings.ToLower(string(appsv1.RecreateDeploymentStrategyType)) {
+					return appsv1.DeploymentStrategy{
+						Type: appsv1.RecreateDeploymentStrategyType,
+					}
+				}
+				return appsv1.DeploymentStrategy{
+					Type: appsv1.RollingUpdateDeploymentStrategyType,
+				}
+			}(),
 			Replicas: &replica,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
